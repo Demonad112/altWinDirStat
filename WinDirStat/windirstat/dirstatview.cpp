@@ -92,6 +92,8 @@ void CDirstatView::OnUpdateHINT_NEWROOT( ) noexcept {
 		VERIFY( m_treeListControl.RedrawItems( 0, m_treeListControl.GetItemCount( ) - 1 ) );
 		return;
 		}
+	// The tree is being torn down (see CDirstatDoc::DeleteContents): drop every pointer into it.
+	m_treeListControl.SetRootItem( nullptr );
 	}
 
 void CDirstatView::OnUpdateHINT_SELECTIONCHANGED( ) {

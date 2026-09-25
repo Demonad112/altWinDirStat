@@ -461,10 +461,19 @@ void CDocument::DeleteContents()
 
 */
 void CDirstatDoc::DeleteContents( ) noexcept {
+	// Views (tree list, treemap, type list) hold raw pointers into the tree. On a rescan (Delete/Refresh), the old tree
+	// is still on screen here, and any repaint before the views are told would draw freed items (-> _purecall -> abort).
+	// So: detach the tree, tell the views to drop it while it's still alive, and only then free it.
+	const std::unique_ptr<CTreeListItem> old_root( std::move( m_rootItem ) );
+	const std::unique_ptr<Children_String_Heap_Manager> old_name_pool( std::move( m_name_pool ) );
 	m_selectedItem = { nullptr };
 	m_timeTextWritten = false;
-	m_rootItem.reset( );
-	m_name_pool.reset( nullptr );
+	m_extensionDataValid = false;
+	m_extensionRecords.clear( );
+	m_colorMap.clear( );
+	if ( old_root != nullptr ) {
+		CDocument::UpdateAllViews( nullptr, UpdateAllViews_ENUM::HINT_NEWROOT );
+		}
 	}
 
 BOOL CDirstatDoc::OnNewDocument( ) noexcept {
