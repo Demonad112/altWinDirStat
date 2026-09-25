@@ -280,6 +280,40 @@ SetProcessMitigationPolicy(
 		return true;
 		}
 
+	// Settings used to live under HKCU\Software\Seifert\<profile> (the original WinDirStat author's key).
+	// Copy them once to HKCU\Software\altWinDirStat\<profile> so existing users keep their settings.
+	// The old key is left in place; nothing is deleted.
+	void migrate_legacy_settings_key( _In_z_ PCWSTR const profile_name ) {
+		const std::wstring old_path = std::wstring( L"Software\\Seifert\\" ) + profile_name;
+		const std::wstring new_path = std::wstring( L"Software\\altWinDirStat\\" ) + profile_name;
+
+		HKEY existing_new = nullptr;
+		if ( ::RegOpenKeyExW( HKEY_CURRENT_USER, new_path.c_str( ), 0, KEY_READ, &existing_new ) == ERROR_SUCCESS ) {
+			::RegCloseKey( existing_new );
+			return; // already migrated (or settings already saved under the new key)
+			}
+		HKEY old_key = nullptr;
+		if ( ::RegOpenKeyExW( HKEY_CURRENT_USER, old_path.c_str( ), 0, KEY_READ, &old_key ) != ERROR_SUCCESS ) {
+			return; // nothing to migrate
+			}
+		const auto old_key_guard = WDS_SCOPEGUARD_INSTANCE( [&] { ::RegCloseKey( old_key ); } );
+
+		HKEY new_key = nullptr;
+		const LSTATUS create_res = ::RegCreateKeyExW( HKEY_CURRENT_USER, new_path.c_str( ), 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &new_key, nullptr );
+		if ( create_res != ERROR_SUCCESS ) {
+			TRACE( _T( "Settings migration: couldn't create new key (error %ld)\r\n" ), create_res );
+			return;
+			}
+		const LSTATUS copy_res = ::RegCopyTreeW( old_key, nullptr, new_key );
+		::RegCloseKey( new_key );
+		if ( copy_res != ERROR_SUCCESS ) {
+			// Don't leave a half-copied key behind: it would block a retry next launch. We just created it, so it's ours to remove.
+			TRACE( _T( "Settings migration: RegCopyTreeW failed (error %ld)\r\n" ), copy_res );
+			::RegDeleteTreeW( HKEY_CURRENT_USER, new_path.c_str( ) );
+			::RegDeleteKeyW( HKEY_CURRENT_USER, new_path.c_str( ) );
+			}
+		}
+
 	void FileOpenLight(CSingleDocTemplate* const m_pDocTemplate) {
 		constexpr const UINT flags = (BIF_RETURNONLYFSDIRS bitor BIF_USENEWUI bitor BIF_NONEWFOLDERBUTTON);
 		WTL::CFolderDialog bob{ NULL, global_strings::select_folder_dialog_title_text, flags };
@@ -367,7 +401,9 @@ BOOL CDirstatApp::InitInstance( ) {
 	
 	
 
-	CWinApp::SetRegistryKey( _T( "Seifert" ) );
+	CWinApp::SetRegistryKey( _T( "altWinDirStat" ) );
+	// m_pszProfileName (the app title, "altWinDirStat") is final once SetRegistryKey has run.
+	migrate_legacy_settings_key( m_pszProfileName );
 	//LoadStdProfileSettings( 4 );
 
 	GetOptions( )->LoadFromRegistry( );
