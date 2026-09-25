@@ -1,4 +1,28 @@
 altWinDirStat
+
+## Download & install
+
+Every push is built on Windows by GitHub Actions (**Actions → Build → latest run → Artifacts**). Tagged versions (`v*`) are published under **Releases**.
+
+| File | Use |
+|---|---|
+| `altWinDirStat-<ver>-x64-Setup.exe` | Installer (recommended). Adds a Start Menu shortcut and uninstaller. Optionally adds a desktop icon and an Explorer right-click **"Analyze with altWinDirStat"** entry on folders and drives. No admin needed for a per-user install. |
+| `altWinDirStat-<ver>-x64-portable.zip` | Single standalone `.exe` (static MFC/CRT). Unzip and run. |
+| `...-Win32-...` | Same builds for 32-bit Windows. |
+
+**Usage**
+* Launch it with no arguments to get the drive/folder picker.
+* `altWinDirStat.exe "D:\"` or `altWinDirStat.exe "C:\Users"` scans that path directly. This is what the context-menu entry calls.
+* Settings persist in `HKCU\Software\Seifert\windirstat`.
+
+**Build locally**
+1. Install Visual Studio 2022 with the *Desktop development with C++* workload and the *C++ MFC for latest v143 build tools* component.
+2. `nuget restore WinDirStat\windirstat\packages.config -PackagesDirectory WinDirStat\packages`
+3. `msbuild WinDirStat\windirstat\windirstat.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143`
+4. Optional: `ISCC installer\altWinDirStat.iss /DSourceDir=<folder containing altWinDirStat.exe, LICENSE.txt, gpl-2.0.txt, README.md>`
+
+To cut a release: `git tag v1.0.0 && git push origin v1.0.0`.
+
 =============
 
 An unofficial modification of WinDirStat. Tremendous performance improvements.

@@ -401,11 +401,9 @@ BOOL CDirstatApp::InitInstance( ) {
 	m_pMainWnd->BringWindowToTop( );
 	m_pMainWnd->SetForegroundWindow( );
 
-	//if ( cmdInfo.m_nShellCommand != CCommandLineInfo::FileOpen ) { <------WTF WAS GOING ON HERE!!! TODO: BUGBUG: WTF!!!
-	if ( cmdInfo.m_nShellCommand == CCommandLineInfo::FileOpen ) {
-		//OnFileOpen( );
-		OnFileOpenLight( );
-		}
+	// No path argument: ProcessShellCommand already routed FileNew -> ID_FILE_NEW -> OnFileOpenLight (the drive picker).
+	// Path argument (e.g. `windirstat.exe "D:\"` from the Explorer context menu): ProcessShellCommand already opened and started scanning it.
+	// Showing the picker again here would clobber the requested scan, so there's nothing left to do.
 	return TRUE;
 	}
 
