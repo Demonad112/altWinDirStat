@@ -122,6 +122,10 @@
 #define ID_SETTINGS_SHOW                32791
 #define ID_VIEW_SHOWTREEMAP             32792
 #define ID_SETTINGS_CONFIGUREWINDIRSTAT 32793
+#define ID_CLEANUP_EXPLORER_HERE        32774
+#define ID_CLEANUP_CMD_HERE             32808
+#define ID_CLEANUP_DELETE_BIN           32809
+#define ID_CLEANUP_DELETE               32810
 #define ID_CONFIGURE                    32813
 #define ID_POPUP                        32826
 #define ID_VIEW_SHOWFILETYPES           32846
