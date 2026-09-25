@@ -71,6 +71,31 @@ jobs:
           Write-Host "Process $($p.Id) alive after 8s - OK"
           Stop-Process -Id $p.Id -Force
 
+      - name: GUI scan test + screenshot (proves it runs as a windowed viewer on Windows Server)
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          Write-Host "OS: $($os.Caption) build $($os.BuildNumber)"
+          $target = "C:\Program Files"
+          $p = Start-Process -FilePath "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -ArgumentList "`"$target`"" -PassThru
+          Start-Sleep -Seconds 25
+          if ($p.HasExited) { throw "altWinDirStat exited during scan of $target (code $($p.ExitCode))" }
+          $p.Refresh()
+          Write-Host "Window title: '$($p.MainWindowTitle)'  handle: $($p.MainWindowHandle)"
+          if ($p.MainWindowHandle -eq 0) { throw "No GUI window was created" }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          New-Item -ItemType Directory -Force screenshots | Out-Null
+          $bmp.Save("screenshots\altWinDirStat-${{ matrix.platform }}-$($os.BuildNumber).png", [System.Drawing.Imaging.ImageFormat]::Png)
+          Stop-Process -Id $p.Id -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-${{ matrix.platform }}
+          path: screenshots/*.png
+
       - name: Build installer
         shell: pwsh
         run: |
