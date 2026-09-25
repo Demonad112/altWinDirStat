@@ -300,7 +300,7 @@ namespace {
 		//If the function fails, the return value is NULL.
 		//To get extended error information, call GetLastError.
 
-		const HGLOBAL handle_globally_allocated_memory = ::GlobalAlloc( GMEM_MOVEABLE bitand GMEM_ZEROINIT, strSizeInBytes );
+		const HGLOBAL handle_globally_allocated_memory = ::GlobalAlloc( GMEM_MOVEABLE bitor GMEM_ZEROINIT, strSizeInBytes );
 		if ( handle_globally_allocated_memory == nullptr) {
 			displayWindowsMsgBoxWithMessage( global_strings::global_alloc_failed );
 			TRACE( L"%s\r\n", global_strings::global_alloc_failed );
@@ -762,8 +762,7 @@ void CDirstatDoc::OnEditCopy( ) {
 	if ( itemPath.substr( 0, 4 ).compare( L"\\\\?\\" ) == 0 ) {
 		itemPath = itemPath.substr( 4, itemPath.length( ) - 4 );
 		}
-	
-	itemPath.resize( itemPath.length( ) + MAX_PATH );
+
 	CopyToClipboard( std::move( itemPath ), m_frameptr->m_hWnd );
 	//m_frameptr->CopyToClipboard( std::move( itemPath ) );
 	}
@@ -884,7 +883,8 @@ void CDirstatDoc::DeleteSelectedItem( _In_ const bool toRecycleBin ) {
 	op.wFunc  = FO_DELETE;
 	op.pFrom  = from.c_str( );
 	// The shell shows its own confirmation + progress UI.
-	op.fFlags = static_cast<FILEOP_FLAGS>( toRecycleBin ? FOF_ALLOWUNDO : FOF_NOCONFIRMATION );
+	// FOF_WANTNUKEWARNING: if the item can't go to the Recycle Bin (too big, no Bin on that drive), warn instead of silently destroying it.
+	op.fFlags = static_cast<FILEOP_FLAGS>( toRecycleBin ? ( FOF_ALLOWUNDO bitor FOF_WANTNUKEWARNING ) : FOF_NOCONFIRMATION );
 
 	const int result = ::SHFileOperationW( &op );
 	if ( op.fAnyOperationsAborted ) {
