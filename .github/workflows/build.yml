@@ -91,6 +91,21 @@ jobs:
           $bmp.Save("screenshots\altWinDirStat-${{ matrix.platform }}-$($os.BuildNumber).png", [System.Drawing.Imaging.ImageFormat]::Png)
           Stop-Process -Id $p.Id -Force
 
+      - name: Crash diagnostics (stack trace under cdb)
+        if: failure()
+        shell: pwsh
+        run: |
+          $dbgArch = if ("${{ matrix.platform }}" -eq "x64") { "x64" } else { "x86" }
+          $cdb = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\$dbgArch\cdb.exe"
+          if (-not (Test-Path $cdb)) { Write-Host "cdb not found at $cdb"; exit 0 }
+          $exe = "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe"
+          $pdb = Get-ChildItem -Path WinDirStat -Recurse -Filter windirstat.pdb | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          $sym = "$($pdb.DirectoryName);srv*$env:RUNNER_TEMP\sym*https://msdl.microsoft.com/download/symbols"
+          $args = @('-g','-G','-lines','-y',"`"$sym`"",'-c','"sxe c0000409; .lastevent; .ecxr; kP 80; ~*k 30; q"',"`"$exe`"",'"C:\Program Files"')
+          $p = Start-Process $cdb -ArgumentList $args -RedirectStandardOutput cdb.txt -RedirectStandardError cdb.err -PassThru
+          if (-not $p.WaitForExit(240000)) { Stop-Process -Id $p.Id -Force; Write-Host "cdb timed out" }
+          Get-Content cdb.txt | Select-Object -Last 400
+
       - uses: actions/upload-artifact@v4
         with:
           name: screenshot-${{ matrix.platform }}
