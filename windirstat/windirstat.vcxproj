@@ -56,7 +56,7 @@
   <PropertyGroup>
     <OutDir>$(SolutionDir)build\</OutDir>
     <IntDir>$(SolutionDir)intermediate\$(Platform)_$(Configuration)\$(ProjectName)\</IntDir>
-    <TargetName>WinDirStat_$(PlatformShortName.ToLower())</TargetName>
+    <TargetName>altWinDirStat_$(PlatformShortName.ToLower())</TargetName>
     <TargetExt>.exe</TargetExt>
     <LinkIncremental Condition="'$(Configuration)'=='Debug'">true</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)'=='Release'">false</LinkIncremental>

@@ -27,6 +27,7 @@ struct string_hash {
 class Localization final
 {
     static bool CrackStrings(const std::wstring& sFileData, const std::wstring& sPrefix = {});
+    static void ApplyForkBranding();
     static void SearchReplace(std::wstring& input, const std::wstring_view& search, const std::wstring_view& replace);
     static void UpdateWindowText(CWnd& wnd);
 

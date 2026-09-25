@@ -109,14 +109,47 @@ bool Localization::LoadResource(const LANGID language)
     // Load English strings first as a baseline fallback
     CrackStrings(sResourceData, L"en");
 
-    if (GetLocaleInfo(lcid, LOCALE_SLANGUAGE, nullptr, 0) == 0) return true;
-
     // Short-circuit language resource loading sequence; first successful load will return true and exit the function
-    return
+    const bool loaded = GetLocaleInfo(lcid, LOCALE_SLANGUAGE, nullptr, 0) == 0 ||
         LoadExternalLanguage(LOCALE_SNAME, language) ||                                 // External BCP 47 language file
         LoadExternalLanguage(LOCALE_SISO639LANGNAME, language) ||                       // External ISO 639-1 language file
         CrackStrings(sResourceData, GetLocaleString(LOCALE_SNAME, language)) ||         // Built-in BCP 47 resource
         CrackStrings(sResourceData, GetLocaleString(LOCALE_SISO639LANGNAME, language)); // Built-in ISO 639-1 resource
+
+    ApplyForkBranding();
+    return loaded;
+}
+
+// altWinDirStat: rebrand the loaded strings here instead of editing every lang_*.txt, so upstream translation
+// updates merge without conflicts. The About text keeps its original credits and gets a fork notice on top.
+void Localization::ApplyForkBranding()
+{
+    static constexpr std::wstring_view upstreamName = L"WinDirStat";
+    static constexpr std::wstring_view forkName = L"altWinDirStat";
+    static constexpr std::wstring_view keepSuffix = L" Team"; // "WinDirStat Team" is the copyright holder
+
+    for (auto& [key, text] : m_map)
+    {
+        if (key == L"IDS_ABOUT_ABOUT_TEXTss")
+        {
+            text = L"altWinDirStat, an unofficial fork of WinDirStat\n"
+                L"https://github.com/Demonad112/altWinDirStat\n\n" + text;
+            continue;
+        }
+
+        for (size_t pos = 0; (pos = text.find(upstreamName, pos)) != std::wstring::npos;)
+        {
+            const bool alreadyFork = pos >= 3 && std::wstring_view(text).substr(pos - 3, 3) == L"alt";
+            const bool isTeam = std::wstring_view(text).substr(pos + upstreamName.size()).starts_with(keepSuffix);
+            if (alreadyFork || isTeam)
+            {
+                pos += upstreamName.size();
+                continue;
+            }
+            text.replace(pos, upstreamName.size(), forkName);
+            pos += forkName.size();
+        }
+    }
 }
 
 void Localization::UpdateMenu(CMenu& menu)

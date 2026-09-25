@@ -61,7 +61,7 @@ void CDirStatApp::RestartApplication(const bool resetPreferences)
     if (resetPreferences)
     {
         // Clean up registry preferences
-        RegDeleteTree(HKEY_CURRENT_USER, L"Software\\WinDirStat");
+        RegDeleteTree(HKEY_CURRENT_USER, L"Software\\altWinDirStat");
 
         // Enable portable mode by creating the file
         if (InPortableMode())
