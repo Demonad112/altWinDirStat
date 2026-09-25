@@ -583,7 +583,8 @@ CComPtr<IContextMenu> GetContextMenu(const std::vector<CItem*>& items)
 // Application info
 std::wstring GetAppTitle()
 {
-    return std::format(L"{} {}{}.{}.{}", Localization::LookupNeutral(IDS_APP_TITLE),
+    // altWinDirStat: fork name here; IDS_APP_TITLE stays "WinDirStat" because CSV headers use it (keeps CSVs compatible)
+    return std::format(L"{} {}{}.{}.{}", wds::strWinDirStat,
         PRODUCTION == 0 ? L"Beta " : L"", PRD_MAJVER, PRD_MINVER, PRD_PATCH);
 }
 

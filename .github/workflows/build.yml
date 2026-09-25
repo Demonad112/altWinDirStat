@@ -46,7 +46,11 @@ jobs:
       # Upstream targets the VS2026 toolset (v145); the VS2022 toolset (v143) on this runner builds it too.
       - name: Build (Release|${{ matrix.platform }})
         shell: pwsh
-        run: msbuild windirstat.sln /m /nologo /v:minimal /p:Configuration=Release /p:Platform=${{ matrix.platform }} /p:PlatformToolset=v143
+        run: |
+          # Tagged releases are production builds (no "Beta" in the title), like upstream's build.cmd does.
+          $production = if ("${{ github.ref }}" -like "refs/tags/v*") { 1 } else { 0 }
+          msbuild windirstat.sln /m /nologo /v:minimal /p:Configuration=Release /p:Platform=${{ matrix.platform }} /p:PlatformToolset=v143 "/p:ExternalCompilerOptions=/DPRODUCTION=$production"
+          if ($LASTEXITCODE -ne 0) { throw "msbuild failed" }
 
       - name: Collect binary
         shell: pwsh

@@ -33,9 +33,9 @@ public:
         const std::vector<std::wstring>& listViewItems = {}, const std::wstring& checkBoxText = {}, bool checkBoxValue = false);
     ~CMessageBoxDlg() override = default;
 
-    static int Show(const std::wstring& message, const UINT type = MB_OK, CWnd* pParent = nullptr, const CSize& initialSize = {}, const std::wstring& title = Localization::LookupNeutral(IDS_APP_TITLE)) { return Show(message, {}, {}, false, type, pParent, initialSize, title).nID; }
-    static WdsMessageBoxResult Show(const std::wstring& message, const std::wstring& checkboxText, const bool checkboxValue = false, const UINT type = MB_YESNO | MB_ICONQUESTION, CWnd* pParent = nullptr, const CSize& initialSize = {}, const std::wstring& title = Localization::LookupNeutral(IDS_APP_TITLE)) { return Show(message, {}, checkboxText, checkboxValue, type, pParent, initialSize, title); }
-    static WdsMessageBoxResult Show(const std::wstring& message, const std::vector<std::wstring>& listViewItems, const std::wstring& checkboxText, bool checkboxValue = false, UINT type = MB_YESNO | MB_ICONWARNING, CWnd* pParent = nullptr, const CSize& initialSize = {}, const std::wstring& title = Localization::LookupNeutral(IDS_APP_TITLE));
+    static int Show(const std::wstring& message, const UINT type = MB_OK, CWnd* pParent = nullptr, const CSize& initialSize = {}, const std::wstring& title = wds::strWinDirStat) { return Show(message, {}, {}, false, type, pParent, initialSize, title).nID; }
+    static WdsMessageBoxResult Show(const std::wstring& message, const std::wstring& checkboxText, const bool checkboxValue = false, const UINT type = MB_YESNO | MB_ICONQUESTION, CWnd* pParent = nullptr, const CSize& initialSize = {}, const std::wstring& title = wds::strWinDirStat) { return Show(message, {}, checkboxText, checkboxValue, type, pParent, initialSize, title); }
+    static WdsMessageBoxResult Show(const std::wstring& message, const std::vector<std::wstring>& listViewItems, const std::wstring& checkboxText, bool checkboxValue = false, UINT type = MB_YESNO | MB_ICONWARNING, CWnd* pParent = nullptr, const CSize& initialSize = {}, const std::wstring& title = wds::strWinDirStat);
 
     INT_PTR ShowModal() override;
     void SetInitialWindowSize(const CSize size) { m_initialSize = size; }
