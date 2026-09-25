@@ -242,10 +242,16 @@ void CPersistence::GetMainWindowPlacement( _Out_ WINDOWPLACEMENT* const wp ) {
 
 	//const auto s_2 = CRegistryUser::CStyle_GetProfileString( prof_string, prof_string_size, registry_strings::sectionPersistence, entryMainWindowPlacement, _T( "" ) );
 	const auto s = CRegistryUser::GetProfileString_( registry_strings::sectionPersistence, registry_strings::entryMainWindowPlacement, _T( "" ) );
-	if ( !DecodeWindowPlacement( s.c_str( ), wp ) ) {
-		std::terminate( );
-		abort( );//Maybe VS2015 will understand that std::terminate( ) doesn't return.
+	// No saved placement (first run on this machine/user) or a corrupt one: keep the placement the caller
+	// already filled in from GetWindowPlacement. This used to std::terminate(), which killed the app on
+	// first launch whenever a path was passed on the command line (e.g. the Explorer context menu).
+	WINDOWPLACEMENT decoded = { 0 };
+	decoded.length = sizeof( decoded );
+	if ( s.empty( ) || !DecodeWindowPlacement( s.c_str( ), &decoded ) ) {
+		TRACE( _T( "No valid saved main window placement - using default.\r\n" ) );
+		return;
 		}
+	(*wp) = decoded;
 	
 	RECT rect_to_sanify = wp->rcNormalPosition;
 	SanifyRect( &rect_to_sanify );

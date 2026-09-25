@@ -13,6 +13,14 @@ Every push is built on Windows by GitHub Actions (**Actions → Build → latest
 **Usage**
 * Launch it with no arguments to get the drive/folder picker.
 * `altWinDirStat.exe "D:\"` or `altWinDirStat.exe "C:\Users"` scans that path directly. This is what the context-menu entry calls.
+* Right-click any item in the tree or treemap for these actions:
+  * **Copy Path** (Ctrl+C)
+  * **Explorer Here** (Ctrl+E): opens a folder, or opens a file's parent folder with the file selected.
+  * **Command Prompt Here** (Ctrl+P)
+  * **Delete to Recycle Bin** (Del)
+  * **Permanent delete** (Shift+Del), after an extra confirmation.
+
+  Delete is available only after the scan finishes. It then rescans the same folder so the sizes stay accurate.
 * Settings persist in `HKCU\Software\Seifert\windirstat`.
 
 **Build locally**

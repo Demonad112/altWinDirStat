@@ -71,6 +71,81 @@ jobs:
           Write-Host "Process $($p.Id) alive after 8s - OK"
           Stop-Process -Id $p.Id -Force
 
+      - name: GUI scan test + screenshot (proves it runs as a windowed viewer on Windows Server)
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          Write-Host "OS: $($os.Caption) build $($os.BuildNumber)"
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory -Force screenshots | Out-Null
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("screenshots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          }
+          # The scan runs on worker threads but the UI thread waits for it, so the window stops
+          # responding while scanning and responds again once results are shown.
+          function ScanAndWait($target, $label, $timeoutSec, [bool]$required) {
+            $p = Start-Process -FilePath "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -ArgumentList "`"$target`"" -PassThru
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            Start-Sleep -Seconds 3
+            while ($sw.Elapsed.TotalSeconds -lt $timeoutSec) {
+              if ($p.HasExited) { throw "altWinDirStat exited while scanning $target (code 0x$('{0:X8}' -f $p.ExitCode))" }
+              $p.Refresh()
+              if ($p.Responding -and $p.MainWindowHandle -ne 0) { break }
+              Start-Sleep -Seconds 1
+            }
+            $p.Refresh()
+            $done = $p.Responding -and ($p.MainWindowHandle -ne 0)
+            Write-Host ("[{0}] target='{1}' done={2} elapsed={3:N1}s window='{4}'" -f $label, $target, $done, $sw.Elapsed.TotalSeconds, $p.MainWindowTitle)
+            Start-Sleep -Seconds 2
+            Shot "altWinDirStat-${{ matrix.platform }}-$($os.BuildNumber)-$label"
+            Stop-Process -Id $p.Id -Force
+            if ($required -and -not $done) { throw "Scan of $target did not finish within $timeoutSec s" }
+          }
+          # Required: a known, moderately sized tree (this repo + build output).
+          ScanAndWait "$env:GITHUB_WORKSPACE" "repo" 180 $true
+          # Informational: a large real-world folder (full Visual Studio install lives here).
+          ScanAndWait "C:\Program Files" "program-files" 420 $false
+
+      - name: Crash diagnostics (WER full dump + cdb analysis)
+        if: failure()
+        shell: pwsh
+        run: |
+          $dumpDir = "$env:RUNNER_TEMP\dumps"
+          New-Item -ItemType Directory -Force $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\altWinDirStat.exe"
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty $key DumpFolder $dumpDir -Type ExpandString
+          Set-ItemProperty $key DumpType 2 -Type DWord
+          Set-ItemProperty $key DumpCount 3 -Type DWord
+          $p = Start-Process "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -ArgumentList '"C:\Program Files"' -PassThru
+          if (-not $p.WaitForExit(120000)) { Write-Host "Did not crash within 120s"; Stop-Process -Id $p.Id -Force }
+          else { Write-Host ("Exit code: 0x{0:X8}" -f $p.ExitCode) }
+          Start-Sleep -Seconds 10
+          $dump = Get-ChildItem $dumpDir -Filter *.dmp | Select-Object -First 1
+          if (-not $dump) { Write-Host "No dump written"; exit 0 }
+          $dbgArch = if ("${{ matrix.platform }}" -eq "x64") { "x64" } else { "x86" }
+          $cdb = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\$dbgArch\cdb.exe"
+          $pdb = Get-ChildItem -Path WinDirStat -Recurse -Filter windirstat.pdb | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          $sym = "$($pdb.DirectoryName);srv*$env:RUNNER_TEMP\sym*https://msdl.microsoft.com/download/symbols"
+          & $cdb -z $dump.FullName -y $sym -lines -c ".ecxr; kP 60; .echo ======; !analyze -v; q" 2>&1 | Select-Object -Last 300
+          New-Item -ItemType Directory -Force crash | Out-Null
+          Copy-Item $dump.FullName crash\
+          Copy-Item $pdb.FullName crash\
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: crash-${{ matrix.platform }}
+          path: crash/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-${{ matrix.platform }}
+          path: screenshots/*.png
+
       - name: Build installer
         shell: pwsh
         run: |

@@ -115,9 +115,11 @@ BEGIN
         MENUITEM "<toggle>",                    ID_POPUP_TOGGLE
         MENUITEM SEPARATOR
         MENUITEM "&Copy Path\tCtrl+C",          57634
+        MENUITEM "&Explorer Here\tCtrl+E",      ID_CLEANUP_EXPLORER_HERE
+        MENUITEM "C&ommand Prompt Here\tCtrl+P", ID_CLEANUP_CMD_HERE
         MENUITEM SEPARATOR
-        MENUITEM "&Delete (to Recycle Bin)\tDel", 32809
-        MENUITEM "Delete (no &way to undelete!)\tShift+Del", 32810
+        MENUITEM "&Delete (to Recycle Bin)\tDel", ID_CLEANUP_DELETE_BIN
+        MENUITEM "Delete (no &way to undelete!)\tShift+Del", ID_CLEANUP_DELETE
     END
 END
 
@@ -127,8 +129,11 @@ BEGIN
     BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Copy Path\tCtrl+C",          57634
-        MENUITEM "&Explorer Here\tCtrl+E",      32774
-        MENUITEM "C&ommand Prompt Here\tCtrl+P", 32808
+        MENUITEM "&Explorer Here\tCtrl+E",      ID_CLEANUP_EXPLORER_HERE
+        MENUITEM "C&ommand Prompt Here\tCtrl+P", ID_CLEANUP_CMD_HERE
+        MENUITEM SEPARATOR
+        MENUITEM "&Delete (to Recycle Bin)\tDel", ID_CLEANUP_DELETE_BIN
+        MENUITEM "Delete (no &way to undelete!)\tShift+Del", ID_CLEANUP_DELETE
         MENUITEM SEPARATOR
         MENUITEM "C&ancel\tEsc",                ID_POPUP_CANCEL
     END
@@ -147,6 +152,11 @@ BEGIN
     VK_SUBTRACT,    ID_TREEMAP_ZOOMOUT,     VIRTKEY, NOINVERT
     VK_F8,          ID_VIEW_SHOWFILETYPES,  VIRTKEY, NOINVERT
     VK_F9,          ID_VIEW_SHOWTREEMAP,    VIRTKEY, NOINVERT
+    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL, NOINVERT
+    "E",            ID_CLEANUP_EXPLORER_HERE, VIRTKEY, CONTROL, NOINVERT
+    "P",            ID_CLEANUP_CMD_HERE,    VIRTKEY, CONTROL, NOINVERT
+    VK_DELETE,      ID_CLEANUP_DELETE_BIN,  VIRTKEY, NOINVERT
+    VK_DELETE,      ID_CLEANUP_DELETE,      VIRTKEY, SHIFT, NOINVERT
 END
 
 

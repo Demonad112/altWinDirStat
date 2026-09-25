@@ -127,6 +127,16 @@ protected:
 public:
 	afx_msg void OnUpdateEditCopy( _In_ CCmdUI* pCmdUI );
 	afx_msg void OnEditCopy( );
+	afx_msg void OnUpdateCleanupExplorerHere( _In_ CCmdUI* pCmdUI );
+	afx_msg void OnCleanupExplorerHere( );
+	afx_msg void OnUpdateCleanupCmdHere( _In_ CCmdUI* pCmdUI );
+	afx_msg void OnCleanupCmdHere( );
+	afx_msg void OnUpdateCleanupDelete( _In_ CCmdUI* pCmdUI );
+	afx_msg void OnCleanupDeleteBin( );
+	afx_msg void OnCleanupDelete( );
+private:
+	void DeleteSelectedItem( _In_ const bool toRecycleBin );
+public:
 	
 public:
 	#ifdef _DEBUG

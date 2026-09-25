@@ -710,6 +710,14 @@ void CDirstatDoc::RebuildExtensionData() {
 BEGIN_MESSAGE_MAP(CDirstatDoc, CDocument)
 	ON_UPDATE_COMMAND_UI(ID_EDIT_COPY, &( CDirstatDoc::OnUpdateEditCopy ) )
 	ON_COMMAND(ID_EDIT_COPY, &( CDirstatDoc::OnEditCopy ) )
+	ON_UPDATE_COMMAND_UI( ID_CLEANUP_EXPLORER_HERE, &( CDirstatDoc::OnUpdateCleanupExplorerHere ) )
+	ON_COMMAND( ID_CLEANUP_EXPLORER_HERE, &( CDirstatDoc::OnCleanupExplorerHere ) )
+	ON_UPDATE_COMMAND_UI( ID_CLEANUP_CMD_HERE, &( CDirstatDoc::OnUpdateCleanupCmdHere ) )
+	ON_COMMAND( ID_CLEANUP_CMD_HERE, &( CDirstatDoc::OnCleanupCmdHere ) )
+	ON_UPDATE_COMMAND_UI( ID_CLEANUP_DELETE_BIN, &( CDirstatDoc::OnUpdateCleanupDelete ) )
+	ON_COMMAND( ID_CLEANUP_DELETE_BIN, &( CDirstatDoc::OnCleanupDeleteBin ) )
+	ON_UPDATE_COMMAND_UI( ID_CLEANUP_DELETE, &( CDirstatDoc::OnUpdateCleanupDelete ) )
+	ON_COMMAND( ID_CLEANUP_DELETE, &( CDirstatDoc::OnCleanupDelete ) )
 	ON_UPDATE_COMMAND_UI( ID_FILE_OPEN, &CDirstatDoc::OnUpdateFileOpen )
 	ON_UPDATE_COMMAND_UI( ID_FILE_NEW, &CDirstatDoc::OnUpdateFileOpenLight )
 END_MESSAGE_MAP( )
@@ -749,6 +757,143 @@ void CDirstatDoc::OnEditCopy( ) {
 	itemPath.resize( itemPath.length( ) + MAX_PATH );
 	CopyToClipboard( std::move( itemPath ), m_frameptr->m_hWnd );
 	//m_frameptr->CopyToClipboard( std::move( itemPath ) );
+	}
+
+
+namespace {
+	// Strips the `\\?\` long-path prefix, which Explorer, cmd.exe and SHFileOperation don't understand.
+	std::wstring cleanup_display_path( std::wstring path ) {
+		if ( path.compare( 0, 4, L"\\\\?\\" ) == 0 ) {
+			path.erase( 0, 4 );
+			}
+		return path;
+		}
+
+	bool cleanup_path_is_directory( const std::wstring& path ) {
+		const DWORD attr = ::GetFileAttributesW( path.c_str( ) );
+		return ( attr != INVALID_FILE_ATTRIBUTES ) && ( ( attr bitand FILE_ATTRIBUTE_DIRECTORY ) != 0 );
+		}
+
+	// For a file: its parent folder. For a folder: itself.
+	std::wstring cleanup_containing_folder( const std::wstring& path ) {
+		if ( cleanup_path_is_directory( path ) ) {
+			return path;
+			}
+		const auto last_slash = path.find_last_of( L'\\' );
+		if ( last_slash == std::wstring::npos ) {
+			return path;
+			}
+		if ( last_slash == 2 ) {
+			return path.substr( 0, 3 ); // "C:\file" -> "C:\"
+			}
+		return path.substr( 0, last_slash );
+		}
+
+	void cleanup_report_shell_failure( _In_z_ PCWSTR const what, const INT_PTR shell_result ) {
+		if ( shell_result > 32 ) {
+			return;
+			}
+		std::wstring msg( L"altWinDirStat: failed to " );
+		msg += what;
+		msg += L" (ShellExecute error ";
+		msg += std::to_wstring( static_cast<long long>( shell_result ) );
+		msg += L").";
+		displayWindowsMsgBoxWithMessage( msg.c_str( ) );
+		}
+	}
+
+void CDirstatDoc::OnUpdateCleanupExplorerHere( _In_ CCmdUI* pCmdUI ) {
+	pCmdUI->Enable( m_selectedItem != nullptr );
+	}
+
+void CDirstatDoc::OnCleanupExplorerHere( ) {
+	if ( m_selectedItem == nullptr ) {
+		return;
+		}
+	const auto path = cleanup_display_path( m_selectedItem->GetPath( ) );
+	INT_PTR res = 0;
+	if ( cleanup_path_is_directory( path ) ) {
+		res = reinterpret_cast<INT_PTR>( ::ShellExecuteW( AfxGetMainWnd( )->GetSafeHwnd( ), L"open", L"explorer.exe", ( L"\"" + path + L"\"" ).c_str( ), nullptr, SW_SHOWNORMAL ) );
+		}
+	else {
+		// Open the containing folder with the file selected.
+		res = reinterpret_cast<INT_PTR>( ::ShellExecuteW( AfxGetMainWnd( )->GetSafeHwnd( ), L"open", L"explorer.exe", ( L"/select,\"" + path + L"\"" ).c_str( ), nullptr, SW_SHOWNORMAL ) );
+		}
+	cleanup_report_shell_failure( L"open Explorer", res );
+	}
+
+void CDirstatDoc::OnUpdateCleanupCmdHere( _In_ CCmdUI* pCmdUI ) {
+	pCmdUI->Enable( m_selectedItem != nullptr );
+	}
+
+void CDirstatDoc::OnCleanupCmdHere( ) {
+	if ( m_selectedItem == nullptr ) {
+		return;
+		}
+	const auto folder = cleanup_containing_folder( cleanup_display_path( m_selectedItem->GetPath( ) ) );
+	wchar_t comspec[ MAX_PATH ] = { 0 };
+	const DWORD len = ::GetEnvironmentVariableW( L"COMSPEC", comspec, MAX_PATH );
+	PCWSTR const shell = ( ( len > 0 ) && ( len < MAX_PATH ) ) ? comspec : L"cmd.exe";
+	const auto res = reinterpret_cast<INT_PTR>( ::ShellExecuteW( AfxGetMainWnd( )->GetSafeHwnd( ), L"open", shell, nullptr, folder.c_str( ), SW_SHOWNORMAL ) );
+	cleanup_report_shell_failure( L"open a Command Prompt", res );
+	}
+
+void CDirstatDoc::OnUpdateCleanupDelete( _In_ CCmdUI* pCmdUI ) {
+	// Only once the scan has finished (the tree is rebuilt afterwards), and never the scan root itself.
+	pCmdUI->Enable( ( m_selectedItem != nullptr ) && IsRootDone( ) && ( m_selectedItem != m_rootItem.get( ) ) && ( m_selectedItem->m_parent != nullptr ) );
+	}
+
+void CDirstatDoc::OnCleanupDeleteBin( ) {
+	DeleteSelectedItem( true );
+	}
+
+void CDirstatDoc::OnCleanupDelete( ) {
+	DeleteSelectedItem( false );
+	}
+
+void CDirstatDoc::DeleteSelectedItem( _In_ const bool toRecycleBin ) {
+	if ( ( m_selectedItem == nullptr ) || ( !IsRootDone( ) ) || ( m_selectedItem == m_rootItem.get( ) ) || ( m_selectedItem->m_parent == nullptr ) ) {
+		return;
+		}
+	const auto path = cleanup_display_path( m_selectedItem->GetPath( ) );
+	const auto rootPath = cleanup_display_path( m_rootItem->GetPath( ) );
+
+	if ( !toRecycleBin ) {
+		const std::wstring question = L"Permanently delete\r\n\r\n" + path + L"\r\n\r\nThis bypasses the Recycle Bin and CANNOT be undone. Continue?";
+		if ( ::MessageBoxW( AfxGetMainWnd( )->GetSafeHwnd( ), question.c_str( ), L"altWinDirStat - permanent delete", MB_YESNO bitor MB_ICONWARNING bitor MB_DEFBUTTON2 ) != IDYES ) {
+			return;
+			}
+		}
+
+	// SHFileOperation needs a double-null-terminated list.
+	std::wstring from( path );
+	from.push_back( L'\0' );
+	from.push_back( L'\0' );
+
+	SHFILEOPSTRUCTW op = { };
+	op.hwnd   = AfxGetMainWnd( )->GetSafeHwnd( );
+	op.wFunc  = FO_DELETE;
+	op.pFrom  = from.c_str( );
+	// The shell shows its own confirmation + progress UI.
+	op.fFlags = static_cast<FILEOP_FLAGS>( toRecycleBin ? FOF_ALLOWUNDO : FOF_NOCONFIRMATION );
+
+	const int result = ::SHFileOperationW( &op );
+	if ( op.fAnyOperationsAborted ) {
+		return; // user cancelled - nothing (or only part) changed; the rescan below is skipped.
+		}
+	if ( result != 0 ) {
+		std::wstring msg = L"altWinDirStat: could not delete\r\n" + path + L"\r\n(SHFileOperation error 0x";
+		wchar_t hex[ 16 ] = { 0 };
+		swprintf_s( hex, L"%X", static_cast<unsigned>( result ) );
+		msg += hex;
+		msg += L"). Check permissions, or whether the file is in use.";
+		displayWindowsMsgBoxWithMessage( msg.c_str( ) );
+		return;
+		}
+
+	// The in-memory tree is packed into fixed arrays, so rebuild it by rescanning the same root.
+	// This replaces the document's contents: don't touch any members after this call.
+	GetDocTemplate( )->OpenDocumentFile( rootPath.c_str( ), TRUE );
 	}
 
 
