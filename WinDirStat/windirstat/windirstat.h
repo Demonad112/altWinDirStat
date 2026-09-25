@@ -72,10 +72,16 @@ public:
 	COLORREF                  m_altEncryptionColor;			    // Coloring of encrypted items
 private:
 	CMainFrame*               m_frameptr;
+	bool                      m_reset_settings_on_exit = false; // Options > Reset All Settings: wipe the key once every window has saved, then relaunch.
+	std::wstring              m_relaunch_path;                  // Folder to reopen after a reset.
 protected:
 	DECLARE_MESSAGE_MAP()
 	afx_msg void OnFileOpen();
 	afx_msg void OnFileOpenLight();
+	afx_msg void OnUpdateRestartAdmin( CCmdUI* pCmdUI );
+	afx_msg void OnRestartAdmin();
+	afx_msg void OnUpdateResetSettings( CCmdUI* pCmdUI );
+	afx_msg void OnResetSettings();
 	afx_msg void OnAppAbout();
 
 	};

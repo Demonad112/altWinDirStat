@@ -62,14 +62,24 @@ jobs:
           Copy-Item README.md "$out\README.md"
           Compress-Archive -Path "$out\*" -DestinationPath "dist\altWinDirStat-${{ steps.ver.outputs.version }}-${{ matrix.platform }}-portable.zip"
 
-      - name: Smoke test (launches and stays up)
+      - name: Smoke test (launches, shows the drive start screen)
         shell: pwsh
         run: |
+          Add-Type -Namespace W -Name S -MemberDefinition '[DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern System.IntPtr FindWindowW(string c, string t);'
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $p = Start-Process -FilePath "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -PassThru
           Start-Sleep -Seconds 8
           if ($p.HasExited) { throw "altWinDirStat exited early with code $($p.ExitCode)" }
-          Write-Host "Process $($p.Id) alive after 8s - OK"
+          # With no path argument the app opens the "What do you want to scan?" start screen.
+          $dlg = [W.S]::FindWindowW($null, 'altWinDirStat - What do you want to scan?')
+          New-Item -ItemType Directory -Force screenshots | Out-Null
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("screenshots\altWinDirStat-${{ matrix.platform }}-start-screen.png", [System.Drawing.Imaging.ImageFormat]::Png)
           Stop-Process -Id $p.Id -Force
+          if ($dlg -eq [IntPtr]::Zero) { throw "Drive start screen did not appear" }
+          Write-Host "Process $($p.Id) alive after 8s, start screen shown - OK"
 
       - name: GUI scan test + screenshot (proves it runs as a windowed viewer on Windows Server)
         shell: pwsh
@@ -162,6 +172,34 @@ jobs:
           if ($v -ne 0x00ABCDEF) { throw ("Migrated treemapHighlightColor = 0x{0:X8}, expected 0x00ABCDEF" -f $v) }
           if (-not (Test-Path $old)) { throw "Legacy key was removed; migration must leave it in place" }
           Write-Host "Rescans survived; settings migrated to $new (marker 0x00ABCDEF preserved); legacy key left in place."
+
+          # Options > Reset All Settings: confirm the prompt, then the app must wipe its settings and relaunch on the same folder,
+          # without re-importing the legacy key.
+          Add-Type -Namespace W -Name R -MemberDefinition @'
+          [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern System.IntPtr FindWindowW(string c, string t);
+          [DllImport("user32.dll")] public static extern System.IntPtr GetDlgItem(System.IntPtr h, int id);
+          [DllImport("user32.dll")] public static extern System.IntPtr SendMessageW(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);
+          '@
+          $ID_OPTIONS_RESET_SETTINGS = 33032  # resource.h
+          $p = Start-Process -FilePath "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -ArgumentList "`"$dir`"" -PassThru
+          Start-Sleep -Seconds 3
+          WaitIdle $p "scan before reset"
+          [void][W.U]::PostMessageW($p.MainWindowHandle, 0x0111, [IntPtr]$ID_OPTIONS_RESET_SETTINGS, [IntPtr]::Zero)
+          $box = [IntPtr]::Zero
+          foreach ($i in 1..20) { Start-Sleep -Milliseconds 500; $box = [W.R]::FindWindowW('#32770', 'altWinDirStat - Reset All Settings'); if ($box -ne [IntPtr]::Zero) { break } }
+          if ($box -eq [IntPtr]::Zero) { Stop-Process -Id $p.Id -Force; throw "Reset confirmation did not appear" }
+          [void][W.R]::SendMessageW([W.R]::GetDlgItem($box, 6), 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)  # BM_CLICK on IDYES
+          if (-not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force; throw "App did not close after confirming reset" }
+          Start-Sleep -Seconds 4
+          $relaunched = Get-Process altWinDirStat -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $p.Id } | Select-Object -First 1
+          if (-not $relaunched) { throw "App did not relaunch after reset" }
+          $relaunched.Refresh()
+          Write-Host "Relaunched as PID $($relaunched.Id), window '$($relaunched.MainWindowTitle)'"
+          if ($relaunched.MainWindowTitle -notlike 'rescan-test*') { Stop-Process -Id $relaunched.Id -Force; throw "Relaunch did not reopen the same folder" }
+          $after = (Get-ItemProperty "$new\options" -ErrorAction SilentlyContinue).treemapHighlightColor
+          Stop-Process -Id $relaunched.Id -Force
+          if ($after -eq 0x00ABCDEF) { throw "Settings were not reset (marker still present, or re-migrated from the legacy key)" }
+          Write-Host "Reset All Settings wiped the settings and relaunched on the same folder."
           Remove-Item 'HKCU:\Software\Seifert\altWinDirStat' -Recurse -Force
           Remove-Item 'HKCU:\Software\altWinDirStat' -Recurse -Force
 
@@ -239,5 +277,8 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: out/*
+          # Only the installers and portable zips; CI screenshots are uploaded as artifacts, not release assets.
+          files: |
+            out/*.zip
+            out/*Setup.exe
           generate_release_notes: true

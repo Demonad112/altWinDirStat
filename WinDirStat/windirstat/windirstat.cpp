@@ -14,7 +14,8 @@ WDS_FILE_INCLUDE_MESSAGE
 
 #include "macros_that_scare_small_children.h"
 #include "graphview.h"
-//#include "SelectDrivesDlg.h"
+#include "selectdrivesdlg.h"
+#include "TreeListControl.h"	// CTreeListItem::GetPath
 #include "dirstatdoc.h"
 #include "options.h"
 #include "windirstat.h"
@@ -314,19 +315,72 @@ SetProcessMitigationPolicy(
 			}
 		}
 
-	void FileOpenLight(CSingleDocTemplate* const m_pDocTemplate) {
-		constexpr const UINT flags = (BIF_RETURNONLYFSDIRS bitor BIF_USENEWUI bitor BIF_NONEWFOLDERBUTTON);
-		WTL::CFolderDialog bob{ NULL, global_strings::select_folder_dialog_title_text, flags };
-		//ASSERT( m_folder_name_heap.compare( m_folderName ) == 0 );
-		const INT_PTR resDoModal = bob.DoModal();
-		if (resDoModal == IDOK) {
-			PCWSTR const m_folder_name_heap(bob.GetFolderPath());
-			if (wcslen(m_folder_name_heap) > 0) {
-
-				//Here, calls CSingleDocTemplate::OpenDocumentFile (in docsingl.cpp)
-				m_pDocTemplate->OpenDocumentFile(m_folder_name_heap, TRUE);
-				}
+	bool is_process_elevated( ) noexcept {
+		HANDLE token = nullptr;
+		if ( !::OpenProcessToken( ::GetCurrentProcess( ), TOKEN_QUERY, &token ) ) {
+			return false;
 			}
+		TOKEN_ELEVATION elevation = { };
+		DWORD size = 0;
+		const BOOL ok = ::GetTokenInformation( token, TokenElevation, &elevation, sizeof( elevation ), &size );
+		::CloseHandle( token );
+		return ( ok != FALSE ) && ( elevation.TokenIsElevated != 0 );
+		}
+
+	// The folder currently loaded, without the \\?\ prefix, or empty.
+	std::wstring current_root_path( ) {
+		const CDirstatDoc* const doc = GetDocument( );
+		if ( ( doc == nullptr ) || ( doc->m_rootItem == nullptr ) ) {
+			return std::wstring( );
+			}
+		std::wstring path( doc->m_rootItem->GetPath( ) );
+		if ( path.compare( 0, 4, L"\\\\?\\" ) == 0 ) {
+			path.erase( 0, 4 );
+			}
+		return path;
+		}
+
+	bool is_scanning( ) {
+		const CDirstatDoc* const doc = GetDocument( );
+		return ( doc != nullptr ) && ( doc->m_rootItem != nullptr ) && !doc->IsRootDone( );
+		}
+
+	// Starts another copy of this exe on `path` (may be empty). verb "runas" asks for administrator rights.
+	// Returns false if it didn't start, including when the user said No to the UAC prompt.
+	bool launch_self( _In_z_ PCWSTR const verb, const std::wstring& path ) {
+		wchar_t exe[ MAX_PATH ] = { 0 };
+		const DWORD len = ::GetModuleFileNameW( nullptr, exe, MAX_PATH );
+		if ( ( len == 0 ) || ( len >= MAX_PATH ) ) {
+			return false;
+			}
+		std::wstring params;
+		if ( !path.empty( ) ) {
+			// A trailing backslash would escape the closing quote ("C:\" parses as C:"), so double it.
+			params = L"\"" + path + ( ( path.back( ) == L'\\' ) ? L"\\" : L"" ) + L"\"";
+			}
+		SHELLEXECUTEINFOW info = { };
+		info.cbSize       = sizeof( info );
+		info.fMask        = SEE_MASK_NOASYNC;
+		CWnd* const main_wnd = AfxGetMainWnd( ); // null during ExitInstance
+		info.hwnd         = ( main_wnd != nullptr ) ? main_wnd->GetSafeHwnd( ) : nullptr;
+		info.lpVerb       = verb;
+		info.lpFile       = exe;
+		info.lpParameters = params.empty( ) ? nullptr : params.c_str( );
+		info.nShow        = SW_SHOWNORMAL;
+		if ( !::ShellExecuteExW( &info ) ) {
+			TRACE( _T( "launch_self(%s) failed: %lu\r\n" ), verb, ::GetLastError( ) );
+			return false;
+			}
+		return true;
+		}
+
+	// The start screen: pick a drive (with size/free/used) or a folder. Empty if cancelled.
+	std::wstring choose_drive_or_folder( ) {
+		CSelectDrivesDlg dlg( AfxGetMainWnd( ) );
+		if ( dlg.DoModal( ) != IDOK ) {
+			return std::wstring( );
+			}
+		return dlg.m_selected_path;
 		}
 
 
@@ -339,6 +393,10 @@ BEGIN_MESSAGE_MAP(CDirstatApp, CWinApp)
 	ON_COMMAND(ID_APP_ABOUT, &( CDirstatApp::OnAppAbout ) )
 	ON_COMMAND(ID_FILE_OPEN, &( CDirstatApp::OnFileOpen ) )
 	ON_COMMAND(ID_FILE_NEW, &( CDirstatApp::OnFileOpenLight ) )
+	ON_UPDATE_COMMAND_UI(ID_FILE_RESTART_ADMIN, &( CDirstatApp::OnUpdateRestartAdmin ) )
+	ON_COMMAND(ID_FILE_RESTART_ADMIN, &( CDirstatApp::OnRestartAdmin ) )
+	ON_UPDATE_COMMAND_UI(ID_OPTIONS_RESET_SETTINGS, &( CDirstatApp::OnUpdateResetSettings ) )
+	ON_COMMAND(ID_OPTIONS_RESET_SETTINGS, &( CDirstatApp::OnResetSettings ) )
 END_MESSAGE_MAP()
 
 
@@ -444,10 +502,57 @@ BOOL CDirstatApp::InitInstance( ) {
 	}
 
 INT CDirstatApp::ExitInstance( ) {
+	if ( m_reset_settings_on_exit ) {
+		// Every window has saved its layout by now, so wiping here is final. Leave the key in place (empty) so the
+		// one-time Seifert migration doesn't copy the old settings straight back in on the next launch.
+		const std::wstring key = std::wstring( L"Software\\altWinDirStat\\" ) + m_pszProfileName;
+		const LSTATUS delete_res = ::RegDeleteTreeW( HKEY_CURRENT_USER, key.c_str( ) );
+		if ( ( delete_res != ERROR_SUCCESS ) && ( delete_res != ERROR_FILE_NOT_FOUND ) ) {
+			TRACE( _T( "Reset settings: RegDeleteTreeW failed (%ld)\r\n" ), delete_res );
+			}
+		HKEY empty_key = nullptr;
+		if ( ::RegCreateKeyExW( HKEY_CURRENT_USER, key.c_str( ), 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &empty_key, nullptr ) == ERROR_SUCCESS ) {
+			::RegCloseKey( empty_key );
+			}
+		VERIFY( launch_self( L"open", m_relaunch_path ) );
+		}
 	// Terminate ATL
-	_Module.Term( );	
+	_Module.Term( );
 	const auto retval = CWinApp::ExitInstance( );
 	return retval;
+	}
+
+void CDirstatApp::OnUpdateRestartAdmin( CCmdUI* pCmdUI ) {
+	// Already elevated: nothing to restart into.
+	pCmdUI->Enable( !is_process_elevated( ) && !is_scanning( ) );
+	}
+
+void CDirstatApp::OnRestartAdmin( ) {
+	if ( is_process_elevated( ) || is_scanning( ) ) {
+		return;
+		}
+	// If the user declines the UAC prompt, launch_self fails and this window simply stays open.
+	if ( launch_self( L"runas", current_root_path( ) ) ) {
+		m_pMainWnd->PostMessageW( WM_CLOSE );
+		}
+	}
+
+void CDirstatApp::OnUpdateResetSettings( CCmdUI* pCmdUI ) {
+	pCmdUI->Enable( !is_scanning( ) );
+	}
+
+void CDirstatApp::OnResetSettings( ) {
+	const int answer = ::MessageBoxW( m_pMainWnd->GetSafeHwnd( ),
+		L"Reset all altWinDirStat settings to their defaults?\r\n\r\n"
+		L"This resets the window layout, column widths, colors, treemap style and all options. "
+		L"altWinDirStat will restart on the same folder.",
+		L"altWinDirStat - Reset All Settings", MB_YESNO bitor MB_ICONQUESTION bitor MB_DEFBUTTON2 );
+	if ( answer != IDYES ) {
+		return;
+		}
+	m_reset_settings_on_exit = true;
+	m_relaunch_path = current_root_path( );
+	m_pMainWnd->PostMessageW( WM_CLOSE );
 	}
 
 void CDirstatApp::OnAppAbout( ) {
@@ -455,14 +560,25 @@ void CDirstatApp::OnAppAbout( ) {
 	}
 
 void CDirstatApp::OnFileOpen( ) {
+	if ( is_scanning( ) ) {
+		return;
+		}
 	const auto path_str = test_file_open( );
 	if ( !( path_str.empty( ) ) ) {
 		m_pDocTemplate->OpenDocumentFile( path_str.c_str( ), true );
 		}
 	}
 
+// Start screen (also Ctrl+O): pick a drive from the list, or a folder.
 void CDirstatApp::OnFileOpenLight( ) {
-	FileOpenLight(m_pDocTemplate);
+	if ( is_scanning( ) ) {
+		return;
+		}
+	const auto path_str = choose_drive_or_folder( );
+	if ( !( path_str.empty( ) ) ) {
+		//Here, calls CSingleDocTemplate::OpenDocumentFile (in docsingl.cpp). Safe with a tree already loaded: see CDirstatDoc::DeleteContents.
+		m_pDocTemplate->OpenDocumentFile( path_str.c_str( ), TRUE );
+		}
 	}
 
 BOOL CDirstatApp::OnIdle( _In_ LONG lCount ) {

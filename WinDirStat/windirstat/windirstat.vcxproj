@@ -728,6 +728,7 @@
     <ClCompile Include="hwnd_funcs.cpp" />
     <ClCompile Include="mainframe.cpp" />
     <ClCompile Include="mountpoints.cpp" />
+    <ClCompile Include="selectdrivesdlg.cpp" />
     <ClCompile Include="options.cpp" />
     <ClCompile Include="PageGeneral.cpp" />
     <ClCompile Include="PageTreemap.cpp" />
@@ -764,6 +765,7 @@
     <ClInclude Include="macros_that_scare_small_children.h" />
     <ClInclude Include="mainframe.h" />
     <ClInclude Include="mountpoints.h" />
+    <ClInclude Include="selectdrivesdlg.h" />
     <ClInclude Include="nt_kernel_support.h" />
     <ClInclude Include="options.h" />
     <ClInclude Include="ownerdrawnlistcontrol.h" />

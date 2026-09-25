@@ -651,7 +651,14 @@ bool CDirstatDoc::Work( ) {
 		
 		m_rootItem->AddChildren( &( DirStatView->m_treeListControl ) );
 		if ( should_we_elevate ) {
-			displayWindowsMsgBoxWithMessage( L"Couldn't query MFT file size, as Windows denied access. If you'd like to see the size of the MFT, run as an administrator." );
+			const int answer = ::MessageBoxW( AfxGetMainWnd( )->GetSafeHwnd( ),
+				L"Windows didn't allow altWinDirStat to read the size of the MFT (the drive's master file table), so it isn't included in the totals.\r\n\r\n"
+				L"Restart as administrator to include it?",
+				L"altWinDirStat", MB_YESNO bitor MB_ICONINFORMATION bitor MB_DEFBUTTON2 );
+			if ( answer == IDYES ) {
+				// Handled by CDirstatApp::OnRestartAdmin, after this idle pass has finished.
+				AfxGetMainWnd( )->PostMessageW( WM_COMMAND, ID_FILE_RESTART_ADMIN );
+				}
 			}
 		return res;
 		}
@@ -733,18 +740,14 @@ BEGIN_MESSAGE_MAP(CDirstatDoc, CDocument)
 	ON_UPDATE_COMMAND_UI( ID_FILE_NEW, &CDirstatDoc::OnUpdateFileOpenLight )
 END_MESSAGE_MAP( )
 
+// Opening another folder replaces the current tree, which is safe since DeleteContents detaches the views first.
+// Only blocked while a scan is still running.
 void CDirstatDoc::OnUpdateFileOpen( CCmdUI *pCmdUI ) {
-	if ( m_rootItem == nullptr ) {
-		return pCmdUI->Enable( TRUE );
-		}
-	return pCmdUI->Enable( FALSE );
+	pCmdUI->Enable( ( m_rootItem == nullptr ) || IsRootDone( ) );
 	}
 
 void CDirstatDoc::OnUpdateFileOpenLight( CCmdUI *pCmdUI ) {
-	if ( m_rootItem == nullptr ) {
-		return pCmdUI->Enable( TRUE );
-		}
-	return pCmdUI->Enable( FALSE );
+	pCmdUI->Enable( ( m_rootItem == nullptr ) || IsRootDone( ) );
 	}
 
 

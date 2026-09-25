@@ -137,6 +137,8 @@
 #define ID_FILE_OPEN33028               33028
 #define ID_FILE_OPEN_LIGHT              33029
 #define ID_CLEANUP_REFRESH              33030
+#define ID_FILE_RESTART_ADMIN           33031
+#define ID_OPTIONS_RESET_SETTINGS       33032
 #define ID_INDICATOR_MEMORYUSAGE        59142
 
 // Next default values for new objects
@@ -144,7 +146,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        903
-#define _APS_NEXT_COMMAND_VALUE         33031
+#define _APS_NEXT_COMMAND_VALUE         33033
 #define _APS_NEXT_CONTROL_VALUE         1226
 #define _APS_NEXT_SYMED_VALUE           105
 #endif

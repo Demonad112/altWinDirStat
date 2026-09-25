@@ -82,9 +82,11 @@ IDR_MAINFRAME MENU
 BEGIN
     POPUP "&File"
     BEGIN
-        MENUITEM "Open (lightweight)",          ID_FILE_NEW
-        MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Scan a Drive or Folder...\tCtrl+O", ID_FILE_NEW
+        MENUITEM "Scan a F&older...",           ID_FILE_OPEN
         MENUITEM "&Refresh\tF5",                ID_CLEANUP_REFRESH
+        MENUITEM SEPARATOR
+        MENUITEM "Restart as &Administrator",   ID_FILE_RESTART_ADMIN
         MENUITEM SEPARATOR
         MENUITEM "&Quit\tAlt+F4",               ID_APP_EXIT
     END
@@ -102,6 +104,7 @@ BEGIN
         MENUITEM "Show S&tatusbar",             ID_VIEW_STATUS_BAR
         MENUITEM SEPARATOR
         MENUITEM "&Configure WinDirStat...",    ID_CONFIGURE
+        MENUITEM "R&eset All Settings...",      ID_OPTIONS_RESET_SETTINGS
     END
     POPUP "&Help"
     BEGIN
@@ -163,6 +166,7 @@ BEGIN
     VK_DELETE,      ID_CLEANUP_DELETE_BIN,  VIRTKEY, NOINVERT
     VK_DELETE,      ID_CLEANUP_DELETE,      VIRTKEY, SHIFT, NOINVERT
     VK_F5,          ID_CLEANUP_REFRESH,     VIRTKEY, NOINVERT
+    "O",            ID_FILE_NEW,            VIRTKEY, CONTROL, NOINVERT
 END
 
 
@@ -171,18 +175,16 @@ END
 // Dialog
 //
 
-IDD_SELECTDRIVES DIALOGEX 0, 0, 276, 182
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
-CAPTION "altWinDirStat - Select Drives"
+IDD_SELECTDRIVES DIALOGEX 0, 0, 340, 196
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "altWinDirStat - What do you want to scan?"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    CONTROL         "&Individual Drives",IDC_SOMEDRIVES,"Button",BS_AUTORADIOBUTTON,7,31,91,10
-    CONTROL         "A &Folder",IDC_AFOLDER,"Button",BS_AUTORADIOBUTTON,7,150,100,10
-    PUSHBUTTON      "...",IDC_BROWSEFOLDER,219,161,50,14
-    DEFPUSHBUTTON   "OK",IDOK,219,7,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,219,24,50,14
-    CONTROL         "",IDC_DRIVES,"SysListView32",LVS_REPORT | LVS_OWNERDRAWFIXED | LVS_ALIGNLEFT | WS_BORDER | WS_TABSTOP,7,43,262,100
-    EDITTEXT        IDC_FOLDERNAME,6,161,209,14,ES_AUTOHSCROLL
+    LTEXT           "Pick a drive to see what is using its space, or choose a single folder.",IDC_STATIC,7,7,326,10
+    CONTROL         "",IDC_DRIVES,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | LVS_ALIGNLEFT | WS_BORDER | WS_TABSTOP,7,21,326,146
+    PUSHBUTTON      "Choose a &Folder...",IDC_BROWSEFOLDER,7,175,86,14
+    DEFPUSHBUTTON   "&Scan Drive",IDOK,219,175,56,14
+    PUSHBUTTON      "Cancel",IDCANCEL,279,175,54,14
 END
 
 IDD_PAGE_TREEMAP DIALOGEX 0, 0, 380, 202
@@ -311,6 +313,8 @@ END
 STRINGTABLE
 BEGIN
     ID_CLEANUP_REFRESH      "Rescans the current folder or drive.\nRefresh"
+    ID_FILE_RESTART_ADMIN   "Restarts altWinDirStat with administrator rights, on the same folder.\nRestart as Administrator"
+    ID_OPTIONS_RESET_SETTINGS "Resets window layout, colors, columns and options to their defaults.\nReset All Settings"
 END
 
 STRINGTABLE
