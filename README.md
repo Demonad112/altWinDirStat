@@ -2,7 +2,7 @@ altWinDirStat
 
 ## Download & install
 
-Every push is built on Windows by GitHub Actions (**Actions → Build → latest run → Artifacts**). Tagged versions (`v*`) are published under **Releases**.
+Every push to `master` and every pull request is built on Windows by GitHub Actions (**Actions → Build → latest run → Artifacts**). Tagged versions (`v*`) are published under **Releases**.
 
 | File | Use |
 |---|---|
@@ -19,9 +19,11 @@ Every push is built on Windows by GitHub Actions (**Actions → Build → latest
   * **Command Prompt Here** (Ctrl+P)
   * **Delete to Recycle Bin** (Del)
   * **Permanent delete** (Shift+Del), after an extra confirmation.
+  * **Refresh** (F5, also in the File menu): rescans the current folder or drive.
 
   Delete is available only after the scan finishes. It then rescans the same folder so the sizes stay accurate.
-* Settings persist in `HKCU\Software\Seifert\windirstat`.
+  If an item can't go to the Recycle Bin (too large, or no Bin on that drive), Windows asks before deleting it permanently.
+* Settings persist in `HKCU\Software\altWinDirStat\altWinDirStat`. Settings from older versions (`HKCU\Software\Seifert\altWinDirStat`) are copied over once on first launch; the old key is left in place.
 
 **Build locally**
 1. Install Visual Studio 2022 with the *Desktop development with C++* workload and the *C++ MFC for latest v143 build tools* component.
