@@ -727,6 +727,8 @@ BEGIN_MESSAGE_MAP(CDirstatDoc, CDocument)
 	ON_COMMAND( ID_CLEANUP_DELETE_BIN, &( CDirstatDoc::OnCleanupDeleteBin ) )
 	ON_UPDATE_COMMAND_UI( ID_CLEANUP_DELETE, &( CDirstatDoc::OnUpdateCleanupDelete ) )
 	ON_COMMAND( ID_CLEANUP_DELETE, &( CDirstatDoc::OnCleanupDelete ) )
+	ON_UPDATE_COMMAND_UI( ID_CLEANUP_REFRESH, &( CDirstatDoc::OnUpdateCleanupRefresh ) )
+	ON_COMMAND( ID_CLEANUP_REFRESH, &( CDirstatDoc::OnCleanupRefresh ) )
 	ON_UPDATE_COMMAND_UI( ID_FILE_OPEN, &CDirstatDoc::OnUpdateFileOpen )
 	ON_UPDATE_COMMAND_UI( ID_FILE_NEW, &CDirstatDoc::OnUpdateFileOpenLight )
 END_MESSAGE_MAP( )
@@ -864,7 +866,6 @@ void CDirstatDoc::DeleteSelectedItem( _In_ const bool toRecycleBin ) {
 		return;
 		}
 	const auto path = cleanup_display_path( m_selectedItem->GetPath( ) );
-	const auto rootPath = cleanup_display_path( m_rootItem->GetPath( ) );
 
 	if ( !toRecycleBin ) {
 		const std::wstring question = L"Permanently delete\r\n\r\n" + path + L"\r\n\r\nThis bypasses the Recycle Bin and CANNOT be undone. Continue?";
@@ -901,7 +902,24 @@ void CDirstatDoc::DeleteSelectedItem( _In_ const bool toRecycleBin ) {
 		}
 
 	// The in-memory tree is packed into fixed arrays, so rebuild it by rescanning the same root.
-	// This replaces the document's contents: don't touch any members after this call.
+	RescanRoot( );
+	}
+
+void CDirstatDoc::OnUpdateCleanupRefresh( _In_ CCmdUI* pCmdUI ) {
+	// Not while a scan is still running: the idle loop is mid-walk over the current tree.
+	pCmdUI->Enable( ( m_rootItem != nullptr ) && IsRootDone( ) );
+	}
+
+void CDirstatDoc::OnCleanupRefresh( ) {
+	if ( ( m_rootItem == nullptr ) || ( !IsRootDone( ) ) ) {
+		return;
+		}
+	RescanRoot( );
+	}
+
+void CDirstatDoc::RescanRoot( ) {
+	const auto rootPath = cleanup_display_path( m_rootItem->GetPath( ) );
+	// This replaces the document's contents (see DeleteContents): don't touch any members after this call.
 	GetDocTemplate( )->OpenDocumentFile( rootPath.c_str( ), TRUE );
 	}
 

@@ -84,6 +84,7 @@ BEGIN
     BEGIN
         MENUITEM "Open (lightweight)",          ID_FILE_NEW
         MENUITEM "&Open...\tCtrl+O",            ID_FILE_OPEN
+        MENUITEM "&Refresh\tF5",                ID_CLEANUP_REFRESH
         MENUITEM SEPARATOR
         MENUITEM "&Quit\tAlt+F4",               ID_APP_EXIT
     END
@@ -120,6 +121,8 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Delete (to Recycle Bin)\tDel", ID_CLEANUP_DELETE_BIN
         MENUITEM "Delete (no &way to undelete!)\tShift+Del", ID_CLEANUP_DELETE
+        MENUITEM SEPARATOR
+        MENUITEM "&Refresh\tF5",                ID_CLEANUP_REFRESH
     END
 END
 
@@ -134,6 +137,8 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Delete (to Recycle Bin)\tDel", ID_CLEANUP_DELETE_BIN
         MENUITEM "Delete (no &way to undelete!)\tShift+Del", ID_CLEANUP_DELETE
+        MENUITEM SEPARATOR
+        MENUITEM "&Refresh\tF5",                ID_CLEANUP_REFRESH
         MENUITEM SEPARATOR
         MENUITEM "C&ancel\tEsc",                ID_POPUP_CANCEL
     END
@@ -157,6 +162,7 @@ BEGIN
     "P",            ID_CLEANUP_CMD_HERE,    VIRTKEY, CONTROL, NOINVERT
     VK_DELETE,      ID_CLEANUP_DELETE_BIN,  VIRTKEY, NOINVERT
     VK_DELETE,      ID_CLEANUP_DELETE,      VIRTKEY, SHIFT, NOINVERT
+    VK_F5,          ID_CLEANUP_REFRESH,     VIRTKEY, NOINVERT
 END
 
 
@@ -300,6 +306,11 @@ END
 STRINGTABLE
 BEGIN
     ID_EDIT_COPY            "Copies the Selected Path into the Clipboard.\nCopy Path"
+END
+
+STRINGTABLE
+BEGIN
+    ID_CLEANUP_REFRESH      "Rescans the current folder or drive.\nRefresh"
 END
 
 STRINGTABLE
