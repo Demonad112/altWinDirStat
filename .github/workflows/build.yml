@@ -76,20 +76,38 @@ jobs:
         run: |
           $os = Get-CimInstance Win32_OperatingSystem
           Write-Host "OS: $($os.Caption) build $($os.BuildNumber)"
-          $target = "C:\Program Files"
-          $p = Start-Process -FilePath "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -ArgumentList "`"$target`"" -PassThru
-          Start-Sleep -Seconds 25
-          if ($p.HasExited) { throw "altWinDirStat exited during scan of $target (code $($p.ExitCode))" }
-          $p.Refresh()
-          Write-Host "Window title: '$($p.MainWindowTitle)'  handle: $($p.MainWindowHandle)"
-          if ($p.MainWindowHandle -eq 0) { throw "No GUI window was created" }
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           New-Item -ItemType Directory -Force screenshots | Out-Null
-          $bmp.Save("screenshots\altWinDirStat-${{ matrix.platform }}-$($os.BuildNumber).png", [System.Drawing.Imaging.ImageFormat]::Png)
-          Stop-Process -Id $p.Id -Force
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("screenshots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          }
+          # The scan runs on worker threads but the UI thread waits for it, so the window stops
+          # responding while scanning and responds again once results are shown.
+          function ScanAndWait($target, $label, $timeoutSec, [bool]$required) {
+            $p = Start-Process -FilePath "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -ArgumentList "`"$target`"" -PassThru
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            Start-Sleep -Seconds 3
+            while ($sw.Elapsed.TotalSeconds -lt $timeoutSec) {
+              if ($p.HasExited) { throw "altWinDirStat exited while scanning $target (code 0x$('{0:X8}' -f $p.ExitCode))" }
+              $p.Refresh()
+              if ($p.Responding -and $p.MainWindowHandle -ne 0) { break }
+              Start-Sleep -Seconds 1
+            }
+            $p.Refresh()
+            $done = $p.Responding -and ($p.MainWindowHandle -ne 0)
+            Write-Host ("[{0}] target='{1}' done={2} elapsed={3:N1}s window='{4}'" -f $label, $target, $done, $sw.Elapsed.TotalSeconds, $p.MainWindowTitle)
+            Start-Sleep -Seconds 2
+            Shot "altWinDirStat-${{ matrix.platform }}-$($os.BuildNumber)-$label"
+            Stop-Process -Id $p.Id -Force
+            if ($required -and -not $done) { throw "Scan of $target did not finish within $timeoutSec s" }
+          }
+          # Required: a known, moderately sized tree (this repo + build output).
+          ScanAndWait "$env:GITHUB_WORKSPACE" "repo" 180 $true
+          # Informational: a large real-world folder (full Visual Studio install lives here).
+          ScanAndWait "C:\Program Files" "program-files" 420 $false
 
       - name: Crash diagnostics (WER full dump + cdb analysis)
         if: failure()
