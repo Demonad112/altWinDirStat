@@ -109,6 +109,62 @@ jobs:
           # Informational: a large real-world folder (full Visual Studio install lives here).
           ScanAndWait "C:\Program Files" "program-files" 420 $false
 
+      - name: Rescan (Refresh) + settings migration test
+        shell: pwsh
+        run: |
+          # Regression test for the post-Delete rescan crash (use-after-free of the old tree while the views
+          # repainted), and for the one-time HKCU\Software\Seifert -> HKCU\Software\altWinDirStat migration.
+          Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern bool PostMessageW(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);'
+          $ID_CLEANUP_REFRESH = 33030  # resource.h
+          $started = Get-Date
+
+          # Seed a legacy settings key with a marker value; the new key must not exist yet.
+          $old = 'HKCU:\Software\Seifert\altWinDirStat\options'
+          $new = 'HKCU:\Software\altWinDirStat\altWinDirStat'
+          Remove-Item 'HKCU:\Software\altWinDirStat' -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item $old -Force | Out-Null
+          Set-ItemProperty $old treemapHighlightColor 0x00ABCDEF -Type DWord
+
+          $dir = "$env:RUNNER_TEMP\rescan-test"
+          New-Item -ItemType Directory -Force "$dir\sub" | Out-Null
+          1..20 | ForEach-Object { Set-Content "$dir\f$_.txt" ("x" * (100 * $_)) }
+          Set-Content "$dir\sub\inner.dat" ("y" * 5000)
+
+          function WaitIdle($p, $what) {
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            do {
+              Start-Sleep -Milliseconds 500
+              if ($p.HasExited) { throw "altWinDirStat exited during $what (code 0x$('{0:X8}' -f $p.ExitCode))" }
+              $p.Refresh()
+            } until (($p.Responding -and $p.MainWindowHandle -ne 0) -or $sw.Elapsed.TotalSeconds -gt 60)
+            if (-not $p.Responding) { throw "altWinDirStat hung during $what" }
+          }
+
+          $p = Start-Process -FilePath "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -ArgumentList "`"$dir`"" -PassThru
+          Start-Sleep -Seconds 3
+          WaitIdle $p "initial scan"
+          foreach ($i in 1..5) {
+            if ($i -eq 3) { Remove-Item "$dir\f20.txt" }   # tree shrinks between rescans, like after a Delete
+            [void][W.U]::PostMessageW($p.MainWindowHandle, 0x0111, [IntPtr]$ID_CLEANUP_REFRESH, [IntPtr]::Zero)
+            Start-Sleep -Seconds 1
+            WaitIdle $p "refresh #$i"
+            Write-Host "refresh #$i OK"
+          }
+          [void]$p.CloseMainWindow()
+          if (-not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force; throw "altWinDirStat did not exit after WM_CLOSE" }
+
+          $crashes = @(Get-WinEvent -FilterHashtable @{ LogName='Application'; ProviderName='Application Error'; StartTime=$started } -ErrorAction SilentlyContinue |
+                       Where-Object { $_.Message -match 'altWinDirStat' })
+          if ($crashes.Count -gt 0) { $crashes | Format-List TimeCreated, Message; throw "Application Error logged for altWinDirStat" }
+
+          if (-not (Test-Path "$new\options")) { throw "Settings were not migrated/saved to $new" }
+          $v = (Get-ItemProperty "$new\options").treemapHighlightColor
+          if ($v -ne 0x00ABCDEF) { throw ("Migrated treemapHighlightColor = 0x{0:X8}, expected 0x00ABCDEF" -f $v) }
+          if (-not (Test-Path $old)) { throw "Legacy key was removed; migration must leave it in place" }
+          Write-Host "Rescans survived; settings migrated to $new (marker 0x00ABCDEF preserved); legacy key left in place."
+          Remove-Item 'HKCU:\Software\Seifert\altWinDirStat' -Recurse -Force
+          Remove-Item 'HKCU:\Software\altWinDirStat' -Recurse -Force
+
       - name: Crash diagnostics (WER full dump + cdb analysis)
         if: failure()
         shell: pwsh
