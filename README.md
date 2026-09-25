@@ -1,107 +1,79 @@
-# WinDirStat - Windows Directory Statistics
+# altWinDirStat
 
-## Description
+> **Unofficial fork of [WinDirStat](https://github.com/windirstat/windirstat) 2.x.** It is not affiliated with or endorsed by the WinDirStat team. For the official, signed app, use the [official WinDirStat releases](https://github.com/windirstat/windirstat/releases) or [windirstat.net](https://windirstat.net/).
 
-WinDirStat is a disk usage analyzer and cleanup assistant for Microsoft Windows. It scans local drives, selected drives, individual folders, and command-line targets, then shows where storage is being used through a sortable directory tree, an extension/type breakdown, and an interactive [treemap](https://en.wikipedia.org/wiki/Treemap) where larger files and folders take up larger areas.
+altWinDirStat is a disk usage analyzer and cleanup assistant for Windows, built on the official WinDirStat 2.x code. It shows what is filling a drive with a sortable folder tree, a file-type breakdown and an interactive treemap, where bigger files take up bigger areas. It stays responsive on very large volumes and servers.
 
-Alongside the visual overview, WinDirStat helps you investigate and act on disk usage. You can find large files, search and filter results, detect duplicates by hash, inspect logical versus physical size, watch file-system changes, save or reload scans, and launch cleanup or Windows maintenance actions directly from the interface.
+It installs **side by side** with official WinDirStat. It uses its own program name, settings (`HKCU\Software\altWinDirStat`), portable INI (`altWinDirStat.ini`) and Explorer right-click entry, so the two never overwrite each other.
 
-For more information on the background of WinDirStat and alternative versions on other operating systems, please visit the [WinDirStat website](https://windirstat.net/).
+## Features (from WinDirStat 2.x)
 
-### Major features
+* Fast scanning:
+  * direct NTFS MFT reading when run as administrator
+  * multithreaded folder walking otherwise
+  * refresh, suspend, resume and stop
+* All Files, Largest Files, Duplicate Files, Search Results, File Watcher, Extension and Treemap views
+* Duplicate detection by hash, search with filters and regular expressions
+* Built-in actions:
+  * open, copy path, show in Explorer, Command Prompt/PowerShell here
+  * move, delete, empty the Recycle Bin
+* Cleanup and maintenance shortcuts:
+  * Disk Cleanup, DISM, shadow copies, CHKDSK and more
+  * user-defined cleanups
+* Dark mode, portable mode, localization, high-DPI support
 
-* Flexible scanning for local drives, selected drives, folders, and command-line targets, with refresh, suspend, resume, stop, fast NTFS scanning, multithreading, and elevated privilege support
-* All Files, Largest Files, Duplicate Files, Search Results, File Watcher, Extension, and Treemap views
-* Interactive treemap navigation with zooming, parent/child reselection, extension labels, logical or physical sizing, and configurable KDirStat or SequoiaView styling
-* Sortable file details including logical/physical size, percentages, item counts, attributes, owner, modified time, free/unknown space, hardlinks, and hash prefixes
-* Search, duplicate detection, and filtering with regular expressions, configurable hash algorithms, cloud-file safeguards, hardlink deduplication, path/name filters, size filters, and reparse-point exclusions
-* File watching and reporting with created/deleted/modified/renamed events, CSV scan import/export, duplicate CSV export, and command-line CSV workflows
-* Built-in actions for opening items, copying paths, selecting in Explorer, invoking the Explorer context menu, opening Command Prompt or PowerShell, moving files, showing properties, deleting files, and emptying folders or the Recycle Bin
-* Windows cleanup and maintenance shortcuts for Disk Cleanup, Programs and Features, DISM, shadow copies, defrag, CHKDSK, VHDX optimization, hibernate files, user profiles, Mark-of-the-Web tags, sparse files, and NTFS compression
-* User-defined cleanup actions plus dark mode, portable settings, Explorer context-menu integration, localization, locale-aware formatting, configurable columns, larger toolbar icons, and high-DPI aware UI behavior
+## Download
 
-For changes in recent versions, please check out [the change log](CHANGELOG.md).
+Get the latest build from [Releases](https://github.com/Demonad112/altWinDirStat/releases):
 
-### Installation
+| File | Use |
+|---|---|
+| `altWinDirStat-<ver>-x64-Setup.exe` | Installer for most PCs and servers. No admin needed for a per-user install. It can add **"Analyze with altWinDirStat"** to the Explorer right-click menu. |
+| `altWinDirStat-<ver>-x64-portable.zip` | A single `altWinDirStat.exe`. Unzip it anywhere (a USB stick works) and run it. |
+| `…-ARM64-…` / `…-Win32-…` | The same builds for ARM64 and 32-bit Windows. |
 
-The recommended way to install WinDirStat is with a package manager, which also makes future updates easier:
+**Code signing:** release builds are signed only when the repository has a signing certificate configured.
 
-* Install from the [Microsoft Store](https://apps.microsoft.com/detail/9ph1gl95p3wf) for Store-managed installation and updates
-* Install with `winget install -e --id WinDirStat.WinDirStat` (or use `winget upgrade` later)
-* Install with `choco install windirstat` (or use `choco upgrade windirstat` later)
-* Install with `scoop install extras/windirstat` (requires `scoop bucket add extras`)
+Unsigned builds:
 
-If you prefer a manual installer, need a portable archive, or want to browse older versions and beta builds, use the [GitHub releases page](https://github.com/windirstat/windirstat/releases/). If you are not sure which file to choose, download the **64-bit MSI installer**.
+* show a SmartScreen warning: click **More info → Run anyway**
+* are **blocked by Smart App Control** on Windows 11 PCs where it's turned on
 
-| Download | Best for | What is inside |
-| --- | --- | --- |
-| [Microsoft Store app](https://apps.microsoft.com/detail/9ph1gl95p3wf) | Users who want one-click installation and Store-managed updates | Installs WinDirStat through the Microsoft Store app experience on supported Windows systems. |
-| [WinDirStat-x64.msi](https://github.com/windirstat/windirstat/releases/latest/download/WinDirStat-x64.msi) | Most users on modern Intel or AMD 64-bit Windows PCs | Standard Windows installer for 64-bit systems. Adds WinDirStat to the Start menu and installs it like a normal app. |
-| [WinDirStat-arm64.msi](https://github.com/windirstat/windirstat/releases/latest/download/WinDirStat-arm64.msi) | Windows on ARM devices, including newer Surface devices and other Snapdragon-based laptops | Standard Windows installer built for ARM64 Windows. |
-| [WinDirStat-x86.msi](https://github.com/windirstat/windirstat/releases/latest/download/WinDirStat-x86.msi) | Older 32-bit Windows installations | Standard Windows installer for 32-bit systems. |
-| [MSIX bundle](https://github.com/windirstat/windirstat/releases/latest) | Windows App Installer or Store-style deployment across different CPU types | If the release includes an `.msixbundle` asset, it can contain packages for multiple CPU types and Windows chooses the right package for your device. |
-| [WinDirStat.zip](https://github.com/windirstat/windirstat/releases/latest/download/WinDirStat.zip) | Portable use, testing, or running without an installer | Zip archive containing the WinDirStat executables. Extract it first, then run the executable for your CPU type. |
-| [WinDirStat.7z](https://github.com/windirstat/windirstat/releases/latest/download/WinDirStat.7z) | Portable use when you already have 7-Zip installed | Same kind of portable executable archive as the zip file, usually with a smaller download size. |
-
-## Copyright / Licenses
-
-* Copyright © WinDirStat Team ([windirstat.net](https://windirstat.net/))
-
-The application itself is distributed under the terms of the [GPL v2](windirstat/res/license.txt), but parts of the source code are also available under more lenient license terms.
-
-*Note:* you are not at liberty to upgrade the GPL version to anything later than v2 at this moment.
-
-The logo and all derivatives are available under the terms of the Creative
-Commons license [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
-
-## Compatibility
-
-WinDirStat 2.x has been developed for and tested on the following operating systems. It may work on older or newer operating systems, but those systems are not supported.
-
-* Windows 7
-* Windows 8
-* Windows 8.1
-* Windows 10
-* Windows 11
-* Windows Server 2008 R2
-* Windows Server 2012
-* Windows Server 2012 R2
-* Windows Server 2016
-* Windows Server 2019
-* Windows Server 2022
-* Windows Server 2025
-
-## Resources
-
-* A [website](https://windirstat.net/)
-* A [blog](https://blog.windirstat.net/)
-* Twitter/X as [@windirstat](https://x.com/windirstat)
-* SubReddit [r/WinDirStat](https://www.reddit.com/r/WinDirStat/)
-
-Find a more up-to-date list of resources on the website and the blog at any point in time.
-
-## Official Downloads and Malware Warning
-
-WinDirStat's popularity has led to unofficial websites that copy the project's name, branding, or downloads. These sites are not operated by the WinDirStat team, may offer outdated or modified files, and may expose users to malware.
-
-For your safety, install WinDirStat only through the Microsoft Store link and package managers listed above, the official [GitHub releases](https://github.com/windirstat/windirstat/releases/), or links from [windirstat.net](https://windirstat.net/). The team reports impersonation sites when possible, but takedowns are not always successful.
+If you need a signed build on such a PC, use the official WinDirStat.
 
 ## Building
 
-WinDirStat can be built with Visual Studio 2022 or later. A Visual Studio solution file can be loaded from `windirstat.sln`.
+* **Requirements:**
+  * Visual Studio 2022 or later with the C++ desktop workload, ATL, and (for ARM64) the ARM64 build tools
+  * PowerShell for the pre-build steps
+* **With Visual Studio 2026:** open `windirstat.sln` and build.
+* **With Visual Studio 2022:** override the toolset:
 
-## Contributors
+```
+msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
+```
 
-You can contribute by responding to issues, [developing](https://github.com/windirstat/windirstat/wiki/Developers) source code, or developing [translations](https://github.com/windirstat/windirstat/wiki/Contribute-Translation).
+The output is `build\altWinDirStat_x64.exe` (or `_x86` / `_arm64`).
 
-Thank you to everyone who has helped shape WinDirStat over the years.
+CI (`.github/workflows/build.yml`) builds all three architectures, then:
 
-<a href="https://github.com/windirstat/windirstat/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=windirstat/windirstat&max=1000" alt="WinDirStat contributor tiles" />
-</a>
+* runs the smoke tests and upstream's headless test suites
+* builds the installers
+* publishes a GitHub Release on `v*` tags
 
-For additional historical contributors, testers, and translators, please check out [the contributors page](CONTRIBUTORS.md).
+## Staying in sync with WinDirStat
 
-## Logo
+The **Sync with official WinDirStat** workflow runs every Monday, and you can also run it on demand. It merges the latest official WinDirStat into a `sync/upstream-<date>` branch, opens a pull request and runs the build on it. Merge the pull request when it's green.
 
-![WinDirStat logo](windirstat/logos/logo_256px.png)
+The altWinDirStat changes are kept small so these merges rarely conflict. `HANDOFF.md` lists them.
+
+## Credits and licenses
+
+* **Based on WinDirStat.** Copyright © WinDirStat Team ([windirstat.net](https://windirstat.net/)). The original WinDirStat was written by Bernhard Seifert and Oliver Schneider. WinDirStat 2.x is maintained by Bryan Berns and contributors; see [CONTRIBUTORS.md](CONTRIBUTORS.md).
+* **License:** distributed under the terms of the [GPL v2](windirstat/res/license.txt), like WinDirStat. You may not upgrade the GPL version to anything later than v2.
+* **Logo:** the logo and its derivatives are available under the Creative Commons license [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) (WinDirStat Team).
+* **Legacy code:** the pre-2.x altWinDirStat codebase (ariccio's 2014–2016 fork, last release `v0.1.0`) remains in the git history. Check out tag `v0.1.0` to see it.
+
+## Compatibility
+
+The same as official WinDirStat 2.x. Its README lists Windows 7 through 11 and Windows Server 2008 R2 through 2025. altWinDirStat's CI tests on Windows Server 2022.

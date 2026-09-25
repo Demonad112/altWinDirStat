@@ -5,6 +5,9 @@
 /publish/
 /contrib/
 /build/
+/dist/
+/scratch-test/
+/scratch-dumps/
 /enc_temp_folder/
 intermediate/
 
