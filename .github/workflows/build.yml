@@ -1,0 +1,112 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64, Win32]
+    env:
+      PROJECT: WinDirStat\windirstat\windirstat.vcxproj
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - uses: nuget/setup-nuget@v2
+
+      - name: Restore WTL package
+        shell: pwsh
+        run: nuget restore WinDirStat\windirstat\packages.config -PackagesDirectory WinDirStat\packages -NonInteractive
+
+      - name: Compute version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.ref }}" -like "refs/tags/v*") { $v = "${{ github.ref_name }}".TrimStart('v') }
+          else { $v = "0.0.${{ github.run_number }}" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build (Release|${{ matrix.platform }})
+        shell: pwsh
+        run: >
+          msbuild $env:PROJECT /m /nologo /v:minimal
+          /p:Configuration=Release /p:Platform=${{ matrix.platform }}
+          /p:PlatformToolset=v143 /p:RunCodeAnalysis=false /p:EnablePREfast=false
+          /p:SolutionDir=$pwd\WinDirStat\
+
+      - name: Collect binary
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path WinDirStat -Recurse -Filter windirstat.exe |
+                 Where-Object { $_.FullName -notmatch '\\packages\\' } |
+                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $exe) { throw "windirstat.exe not found after build" }
+          Write-Host "Built: $($exe.FullName) ($([math]::Round($exe.Length/1MB,2)) MB)"
+          $out = "dist\altWinDirStat-${{ matrix.platform }}"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item $exe.FullName "$out\altWinDirStat.exe"
+          Copy-Item WinDirStat\windirstat\res\license.txt "$out\LICENSE.txt"
+          Copy-Item WinDirStat\windirstat\gpl-2.0.txt "$out\gpl-2.0.txt"
+          Copy-Item README.md "$out\README.md"
+          Compress-Archive -Path "$out\*" -DestinationPath "dist\altWinDirStat-${{ steps.ver.outputs.version }}-${{ matrix.platform }}-portable.zip"
+
+      - name: Smoke test (launches and stays up)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -PassThru
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) { throw "altWinDirStat exited early with code $($p.ExitCode)" }
+          Write-Host "Process $($p.Id) alive after 8s - OK"
+          Stop-Process -Id $p.Id -Force
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc /Qp "/DAppVersion=${{ steps.ver.outputs.version }}" "/DArch=${{ matrix.platform }}" "/DSourceDir=$pwd\dist\altWinDirStat-${{ matrix.platform }}" "/O$pwd\dist" installer\altWinDirStat.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Installer test (silent install + uninstall)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -Filter "*Setup.exe" | Select-Object -First 1
+          $dir = "$env:RUNNER_TEMP\awds-install"
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER","/DIR=`"$dir`"","/TASKS=contextmenu" -Wait
+          if (-not (Test-Path "$dir\altWinDirStat.exe")) { throw "Installer did not place altWinDirStat.exe" }
+          if (-not (Test-Path "HKCU:\Software\Classes\Directory\shell\altWinDirStat\command")) { throw "Context menu entry missing" }
+          Write-Host "Installed OK to $dir (context menu registered)"
+          Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" -Wait
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: altWinDirStat-${{ steps.ver.outputs.version }}-${{ matrix.platform }}
+          path: |
+            dist/*.zip
+            dist/*Setup.exe
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
