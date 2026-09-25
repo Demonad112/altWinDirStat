@@ -91,20 +91,37 @@ jobs:
           $bmp.Save("screenshots\altWinDirStat-${{ matrix.platform }}-$($os.BuildNumber).png", [System.Drawing.Imaging.ImageFormat]::Png)
           Stop-Process -Id $p.Id -Force
 
-      - name: Crash diagnostics (stack trace under cdb)
+      - name: Crash diagnostics (WER full dump + cdb analysis)
         if: failure()
         shell: pwsh
         run: |
+          $dumpDir = "$env:RUNNER_TEMP\dumps"
+          New-Item -ItemType Directory -Force $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\altWinDirStat.exe"
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty $key DumpFolder $dumpDir -Type ExpandString
+          Set-ItemProperty $key DumpType 2 -Type DWord
+          Set-ItemProperty $key DumpCount 3 -Type DWord
+          $p = Start-Process "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe" -ArgumentList '"C:\Program Files"' -PassThru
+          if (-not $p.WaitForExit(120000)) { Write-Host "Did not crash within 120s"; Stop-Process -Id $p.Id -Force }
+          else { Write-Host ("Exit code: 0x{0:X8}" -f $p.ExitCode) }
+          Start-Sleep -Seconds 10
+          $dump = Get-ChildItem $dumpDir -Filter *.dmp | Select-Object -First 1
+          if (-not $dump) { Write-Host "No dump written"; exit 0 }
           $dbgArch = if ("${{ matrix.platform }}" -eq "x64") { "x64" } else { "x86" }
           $cdb = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\$dbgArch\cdb.exe"
-          if (-not (Test-Path $cdb)) { Write-Host "cdb not found at $cdb"; exit 0 }
-          $exe = "dist\altWinDirStat-${{ matrix.platform }}\altWinDirStat.exe"
           $pdb = Get-ChildItem -Path WinDirStat -Recurse -Filter windirstat.pdb | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           $sym = "$($pdb.DirectoryName);srv*$env:RUNNER_TEMP\sym*https://msdl.microsoft.com/download/symbols"
-          $args = @('-g','-G','-lines','-y',"`"$sym`"",'-c','"sxe c0000409; .lastevent; .ecxr; kP 80; ~*k 30; q"',"`"$exe`"",'"C:\Program Files"')
-          $p = Start-Process $cdb -ArgumentList $args -RedirectStandardOutput cdb.txt -RedirectStandardError cdb.err -PassThru
-          if (-not $p.WaitForExit(240000)) { Stop-Process -Id $p.Id -Force; Write-Host "cdb timed out" }
-          Get-Content cdb.txt | Select-Object -Last 400
+          & $cdb -z $dump.FullName -y $sym -lines -c ".ecxr; kP 60; .echo ======; !analyze -v; q" 2>&1 | Select-Object -Last 300
+          New-Item -ItemType Directory -Force crash | Out-Null
+          Copy-Item $dump.FullName crash\
+          Copy-Item $pdb.FullName crash\
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: crash-${{ matrix.platform }}
+          path: crash/*
 
       - uses: actions/upload-artifact@v4
         with:
