@@ -300,7 +300,7 @@ namespace {
 		//If the function fails, the return value is NULL.
 		//To get extended error information, call GetLastError.
 
-		const HGLOBAL handle_globally_allocated_memory = ::GlobalAlloc( GMEM_MOVEABLE bitand GMEM_ZEROINIT, strSizeInBytes );
+		const HGLOBAL handle_globally_allocated_memory = ::GlobalAlloc( GMEM_MOVEABLE bitor GMEM_ZEROINIT, strSizeInBytes );
 		if ( handle_globally_allocated_memory == nullptr) {
 			displayWindowsMsgBoxWithMessage( global_strings::global_alloc_failed );
 			TRACE( L"%s\r\n", global_strings::global_alloc_failed );
@@ -461,10 +461,19 @@ void CDocument::DeleteContents()
 
 */
 void CDirstatDoc::DeleteContents( ) noexcept {
+	// Views (tree list, treemap, type list) hold raw pointers into the tree. On a rescan (Delete/Refresh), the old tree
+	// is still on screen here, and any repaint before the views are told would draw freed items (-> _purecall -> abort).
+	// So: detach the tree, tell the views to drop it while it's still alive, and only then free it.
+	const std::unique_ptr<CTreeListItem> old_root( std::move( m_rootItem ) );
+	const std::unique_ptr<Children_String_Heap_Manager> old_name_pool( std::move( m_name_pool ) );
 	m_selectedItem = { nullptr };
 	m_timeTextWritten = false;
-	m_rootItem.reset( );
-	m_name_pool.reset( nullptr );
+	m_extensionDataValid = false;
+	m_extensionRecords.clear( );
+	m_colorMap.clear( );
+	if ( old_root != nullptr ) {
+		CDocument::UpdateAllViews( nullptr, UpdateAllViews_ENUM::HINT_NEWROOT );
+		}
 	}
 
 BOOL CDirstatDoc::OnNewDocument( ) noexcept {
@@ -718,6 +727,8 @@ BEGIN_MESSAGE_MAP(CDirstatDoc, CDocument)
 	ON_COMMAND( ID_CLEANUP_DELETE_BIN, &( CDirstatDoc::OnCleanupDeleteBin ) )
 	ON_UPDATE_COMMAND_UI( ID_CLEANUP_DELETE, &( CDirstatDoc::OnUpdateCleanupDelete ) )
 	ON_COMMAND( ID_CLEANUP_DELETE, &( CDirstatDoc::OnCleanupDelete ) )
+	ON_UPDATE_COMMAND_UI( ID_CLEANUP_REFRESH, &( CDirstatDoc::OnUpdateCleanupRefresh ) )
+	ON_COMMAND( ID_CLEANUP_REFRESH, &( CDirstatDoc::OnCleanupRefresh ) )
 	ON_UPDATE_COMMAND_UI( ID_FILE_OPEN, &CDirstatDoc::OnUpdateFileOpen )
 	ON_UPDATE_COMMAND_UI( ID_FILE_NEW, &CDirstatDoc::OnUpdateFileOpenLight )
 END_MESSAGE_MAP( )
@@ -753,8 +764,7 @@ void CDirstatDoc::OnEditCopy( ) {
 	if ( itemPath.substr( 0, 4 ).compare( L"\\\\?\\" ) == 0 ) {
 		itemPath = itemPath.substr( 4, itemPath.length( ) - 4 );
 		}
-	
-	itemPath.resize( itemPath.length( ) + MAX_PATH );
+
 	CopyToClipboard( std::move( itemPath ), m_frameptr->m_hWnd );
 	//m_frameptr->CopyToClipboard( std::move( itemPath ) );
 	}
@@ -856,7 +866,6 @@ void CDirstatDoc::DeleteSelectedItem( _In_ const bool toRecycleBin ) {
 		return;
 		}
 	const auto path = cleanup_display_path( m_selectedItem->GetPath( ) );
-	const auto rootPath = cleanup_display_path( m_rootItem->GetPath( ) );
 
 	if ( !toRecycleBin ) {
 		const std::wstring question = L"Permanently delete\r\n\r\n" + path + L"\r\n\r\nThis bypasses the Recycle Bin and CANNOT be undone. Continue?";
@@ -875,7 +884,8 @@ void CDirstatDoc::DeleteSelectedItem( _In_ const bool toRecycleBin ) {
 	op.wFunc  = FO_DELETE;
 	op.pFrom  = from.c_str( );
 	// The shell shows its own confirmation + progress UI.
-	op.fFlags = static_cast<FILEOP_FLAGS>( toRecycleBin ? FOF_ALLOWUNDO : FOF_NOCONFIRMATION );
+	// FOF_WANTNUKEWARNING: if the item can't go to the Recycle Bin (too big, no Bin on that drive), warn instead of silently destroying it.
+	op.fFlags = static_cast<FILEOP_FLAGS>( toRecycleBin ? ( FOF_ALLOWUNDO bitor FOF_WANTNUKEWARNING ) : FOF_NOCONFIRMATION );
 
 	const int result = ::SHFileOperationW( &op );
 	if ( op.fAnyOperationsAborted ) {
@@ -892,7 +902,24 @@ void CDirstatDoc::DeleteSelectedItem( _In_ const bool toRecycleBin ) {
 		}
 
 	// The in-memory tree is packed into fixed arrays, so rebuild it by rescanning the same root.
-	// This replaces the document's contents: don't touch any members after this call.
+	RescanRoot( );
+	}
+
+void CDirstatDoc::OnUpdateCleanupRefresh( _In_ CCmdUI* pCmdUI ) {
+	// Not while a scan is still running: the idle loop is mid-walk over the current tree.
+	pCmdUI->Enable( ( m_rootItem != nullptr ) && IsRootDone( ) );
+	}
+
+void CDirstatDoc::OnCleanupRefresh( ) {
+	if ( ( m_rootItem == nullptr ) || ( !IsRootDone( ) ) ) {
+		return;
+		}
+	RescanRoot( );
+	}
+
+void CDirstatDoc::RescanRoot( ) {
+	const auto rootPath = cleanup_display_path( m_rootItem->GetPath( ) );
+	// This replaces the document's contents (see DeleteContents): don't touch any members after this call.
 	GetDocTemplate( )->OpenDocumentFile( rootPath.c_str( ), TRUE );
 	}
 

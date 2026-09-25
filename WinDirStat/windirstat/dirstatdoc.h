@@ -134,6 +134,9 @@ public:
 	afx_msg void OnUpdateCleanupDelete( _In_ CCmdUI* pCmdUI );
 	afx_msg void OnCleanupDeleteBin( );
 	afx_msg void OnCleanupDelete( );
+	afx_msg void OnUpdateCleanupRefresh( _In_ CCmdUI* pCmdUI );
+	afx_msg void OnCleanupRefresh( );
+	void RescanRoot( );
 private:
 	void DeleteSelectedItem( _In_ const bool toRecycleBin );
 public:

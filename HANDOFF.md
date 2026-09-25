@@ -12,15 +12,17 @@
 | Repo | `github.com/Demonad112/altWinDirStat`, default branch `master` |
 | Build | Builds with VS2022 (v143 toolset) for x64 and Win32. GitHub Actions on `windows-2022` (Windows Server 2022 Datacenter, build 20348) |
 | Deliverables | `altWinDirStat-<ver>-<arch>-Setup.exe` (Inno Setup) and `altWinDirStat-<ver>-<arch>-portable.zip` |
-| Verified in CI | Compiles; launches; scans `C:\Program Files` with a GUI window present; screenshot taken; silent install/uninstall; context-menu registry keys written |
-| Not verified | Clicking through the UI by hand, the Delete/Explorer/Cmd actions end to end, very large volumes, Windows 10/11 desktop, Server 2016/2019/2025 |
-| Fixed this session | (1) First-run crash (`std::terminate` on missing window placement). (2) Command-line path scan reopening the picker. (3) Delete/Explorer Here/Command Prompt Here were dead menu items |
+| Verified in CI | Compiles; launches; scans `C:\Program Files` with a GUI window present; screenshot taken; silent install/uninstall; context-menu registry keys written. New (see §3a): 5× Refresh rescans with the tree shrinking in between, clean exit, Seifert→altWinDirStat settings migration |
+| Verified by hand (Windows 11 desktop, §3a) | Delete to Recycle Bin, permanent delete, folder delete, Copy Path, Explorer Here, Cmd Here (spawn), F5/menu Refresh |
+| Not verified | Settings migration launched locally (Smart App Control blocked the last local build; CI covers it), very large volumes, Server 2016/2019/2025 |
+| Fixed in PR #1/#2 | (1) First-run crash (`std::terminate` on missing window placement). (2) Command-line path scan reopening the picker. (3) Delete/Explorer Here/Command Prompt Here were dead menu items |
+| Fixed in the local session (§3a) | Crash right after every Delete (use-after-free on rescan); treemap `terminate` during rescan; Copy Path clipboard bugs; terminate audit; settings key moved; Refresh (F5) added |
 
 **Suggested next steps:**
-1. Test the Delete, Explorer Here and Cmd Here actions by hand on a real desktop.
-2. Remove the remaining `std::terminate()` calls from recoverable paths.
-3. Code-sign the installer.
-4. Move settings off the old `HKCU\Software\Seifert` key.
+1. Code-sign the exe and installer. Unsigned local builds are also what Smart App Control blocks.
+2. Reselect or expand the deleted item's parent after a Delete/Refresh rescan. Right now the tree collapses back to the root.
+3. Move Delete from `SHFileOperationW` to `IFileOperation` to support paths longer than MAX_PATH.
+4. Graceful out-of-memory handling in `ChildrenHeapManager.h`. Every caller would need to handle a null child block.
 
 ---
 
@@ -68,7 +70,12 @@ Reference code/, filesystem-docs-n-stuff/, developmentScreenshots/   Upstream au
    - Treemap (`CGraphView` + `CTreemap`), toggled with F9.
    - Extension list (`CTypeView`), toggled with F8.
 5. **Settings:**
-   - Stored under `HKCU\Software\Seifert\windirstat\...`, via MFC `SetRegistryKey(L"Seifert")` in `InitInstance`.
+   - Stored under `HKCU\Software\altWinDirStat\altWinDirStat\...`: MFC `SetRegistryKey(L"altWinDirStat")` in `InitInstance`, plus the app title `altWinDirStat` (`AFX_IDS_APP_TITLE`) as the profile name.
+   - Before §3a the key was `HKCU\Software\Seifert\altWinDirStat`. It was never `...\Seifert\windirstat`, as earlier versions of this file claimed. `migrate_legacy_settings_key` (`windirstat.cpp`) copies it across once.
+6. **Rescans (Delete / Refresh):**
+   - `CDirstatDoc::RescanRoot` calls `OpenDocumentFile` on the same root, which leads to `OnOpenDocument` and then `DeleteContents`.
+   - `DeleteContents` must tell the views (`HINT_NEWROOT`) **before** it frees the tree, because the views hold raw `CTreeListItem*`.
+   - Scanning runs from `OnIdle`, so an open menu or any other modal loop pauses a rescan until it closes. That's expected, not a hang.
 
 ---
 
@@ -127,14 +134,30 @@ Reference code/, filesystem-docs-n-stuff/, developmentScreenshots/   Upstream au
   - GUI scan test: `altWinDirStat.exe "C:\Program Files"`, 25 s alive, `MainWindowHandle != 0`, full-screen PNG uploaded as `screenshot-<arch>`.
   - On failure it enables WER LocalDumps (full dump), analyses with `cdb -z`, and uploads the dump and PDB as `crash-<arch>`.
 
+### 3a. Local session (branch `claude/continue-local-dev`)
+- **Crash after every Delete** (`0xC0000409`), found by hand-testing:
+  - Stack from a WER dump: `DeleteSelectedItem → OpenDocumentFile → OnOpenDocument → SetSplitterPos → RecalcLayout → CDirstatView::OnSize → RedrawWindow → COwnerDrawnListCtrl::DrawItem` on an already-freed `CTreeListItem`, then `_purecall`, then `abort`.
+  - Cause: `DeleteContents` freed the tree while the list still pointed into it.
+  - Fix: `DeleteContents` detaches the tree, sends `HINT_NEWROOT`, and only then frees it. `CDirstatView::OnUpdateHINT_NEWROOT` clears the list when there's no root.
+  - `DeleteContents` also now clears the stale extension records and color map.
+- **Second crash in the same flow:** `CGraphView::OnDraw`, `OnMouseMove` and `OnLButtonDown` called `std::terminate()` when the root wasn't done yet. During a rescan the treemap stays visible, so the next repaint killed the app. They now return early.
+- **Copy Path:**
+  - `GlobalAlloc(GMEM_MOVEABLE bitand GMEM_ZEROINIT)` evaluated to `GMEM_FIXED`. Now uses `bitor`.
+  - The copied text was padded with MAX_PATH NUL characters. Removed.
+- **Recycle-Bin delete** adds `FOF_WANTNUKEWARNING`. Also note: on Win10/11 with default settings, the shell shows **no** confirmation for a recycle-bin delete.
+- **Refresh (F5)** `ID_CLEANUP_REFRESH` = 33030: F5, the File menu, and both popups. It shares `RescanRoot` with Delete.
+- **Terminate audit:** converted the sites that files or input can trigger (`mountpoints.cpp` non-letter drive, `directory_enumeration.cpp` error-message formatting and the `$MFT` unmap). Invariants and OS-resource guards were deliberately kept. See commit `b0dfaf7` for the full list and the reasons.
+- **Settings key** moved to `HKCU\Software\altWinDirStat`, with a one-time migration (§2.5).
+- **CI:** new "Rescan (Refresh) + settings migration test" step. It posts `WM_COMMAND(33030)` 5× and asserts no hang, no crash event, and a migrated marker value.
+
 ---
 
 ## 4. Known issues / risks
 
-1. **Many other `std::terminate()` calls** remain on paths that could be recoverable (`TreeListControl.cpp`, `datastructures.cpp`, `directory_enumeration.cpp`, `ChildrenHeapManager.cpp`). Any of them can hard-crash the app. Audit them; convert the ones that can be triggered by the environment to error handling.
-2. **Delete rescans the whole root**, which is slow on large volumes. A proper fix needs in-place tree mutation, which is hard with the packed `child_info`.
-3. **No code signing**, so SmartScreen warns on first run.
-4. **Registry key** is still `HKCU\Software\Seifert\windirstat`. It's shared with vanilla WinDirStat 1.x, whose settings format may differ.
+1. **Remaining `std::terminate()` calls** (~120) guard internal invariants and GDI/window/timer resource exhaustion (`datastructures.cpp`, `globalhelpers.cpp`, `hwnd_funcs.cpp`, `ownerdrawnlistcontrol.h`, `TreeListControl.cpp`). They were deliberately left in place (see §3a).
+2. **Delete rescans the whole root**, which is slow on large volumes. A proper fix needs in-place tree mutation, which is hard with the packed `child_info`. After the rescan, the tree collapses back to the root.
+3. **No code signing.** SmartScreen warns on first run, and **Smart App Control** (Windows 11) may block locally built, unsigned exes outright. The Code Integrity log shows events 3077/3118. Don't work around it; test in CI or sign the binary.
+4. **An empty scanned folder** shows the root with date 01/01/1601 and a black treemap. This is cosmetic.
 5. **Server Core** has no Explorer shell, so this GUI (like any MFC app) won't be usable there. You need a server with Desktop Experience.
 6. **Hundreds of compiler warnings** under v143 (C4365, C5039, …). They're harmless for now but worth a cleanup pass.
 7. **The solution file** still lists the `Intel_*` configurations (Intel XE 14 toolset, not installed anywhere). Building the `.sln` in the IDE with those selected will fail. Use Release|x64.
@@ -169,11 +192,17 @@ Reference code/, filesystem-docs-n-stuff/, developmentScreenshots/   Upstream au
    & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.0.0 /DArch=x64 "/DSourceDir=$pwd\dist\altWinDirStat-x64" "/O$pwd\dist" installer\altWinDirStat.iss
    ```
 5. Debug in the IDE by opening `WinDirStat\windirstat.sln` and selecting **Debug | x64**. If prompted, retarget to v143. The Debug config turns on `/analyze`, which is slow; switch it off in project properties if needed.
-6. Reset settings for a first-run test: `reg delete "HKCU\Software\Seifert\windirstat" /f`.
+6. Reset settings for a first-run test: `reg delete "HKCU\Software\altWinDirStat" /f`. Also delete `HKCU\Software\Seifert\altWinDirStat`, or it will be migrated back in.
+7. **Gotcha: `MSB8037` "Windows SDK … for Desktop C++ x64 Apps was not found"**, even though the SDK files exist.
+   - Check `HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots\10.0.26100.0\Installed Options`.
+   - If it lacks `OptionId.DesktopCPPx64`, `vs_installer modify` won't fix it. Run the cached SDK installer instead: `C:\ProgramData\Microsoft\VisualStudio\Packages\Win11SDK_10.0.26100*\winsdksetup.exe /features OptionId.DesktopCPPx64 OptionId.DesktopCPPx86 /quiet /norestart`.
+   - Adding `OptionId.WindowsDesktopDebuggers` the same way installs `cdb.exe`.
 
 ---
 
 ## 6. Copy/paste prompt for local Claude Code
+
+> Historical: goals 1–6 below were completed on `claude/continue-local-dev` (§3a). For new work, start from §0's "Suggested next steps".
 
 ```
 You are continuing work on altWinDirStat, a native Windows (MFC/WTL, C++) disk-usage viewer forked from WinDirStat.
@@ -214,6 +243,7 @@ Rules:
 - **Release:** `git tag vX.Y.Z && git push origin vX.Y.Z` runs the `release` job, which attaches all the zips and installers.
 - **Crash triage recipe** (reusable locally):
   ```powershell
+  # The key name must match the exe's basename: altWinDirStat.exe for CI/installed builds, windirstat.exe for a local build.
   $k='HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\altWinDirStat.exe'
   New-Item $k -Force; Set-ItemProperty $k DumpFolder C:\dumps -Type ExpandString; Set-ItemProperty $k DumpType 2 -Type DWord
   # reproduce the crash, then:

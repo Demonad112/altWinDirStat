@@ -56,13 +56,12 @@ const bool CMountPoints::IsMountPoint( _In_ const std::wstring& path ) const {
 
 	const std::wint_t pathAtZero = ::towlower( path[ 0 ] );
 	constexpr const wchar_t weirdAss_a = L'a';
+	// Not a drive letter (e.g. "1:\" from the command line): can't be a volume mount point. IsVolumeMountPoint range-checks the upper end.
 	if( weirdAss_a > pathAtZero ){
-		std::terminate();
+		TRACE( _T( "CMountPoints::IsMountPoint: not a drive letter path (%s)\r\n" ), path.c_str( ) );
+		return false;
 		}
 	const auto indexItem  = pathAtZero - weirdAss_a;
-	if ( indexItem < 0 ){
-		std::terminate();
-		}
 	return IsVolumeMountPoint( static_cast<rsize_t>( indexItem ), path );
 	}
 

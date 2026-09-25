@@ -240,3 +240,5 @@ pip-log.txt
 #############
 WinDirStat/windirstat.VC.db
 WinDirStat/windirstat.VC.VC.opendb
+scratch-test/
+scratch-dumps/

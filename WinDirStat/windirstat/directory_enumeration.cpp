@@ -282,7 +282,8 @@ namespace {
 		rsize_t chars_written = 0;
 		const HRESULT fmt_res = CStyle_GetLastErrorAsFormattedMessage( error_message_buffer, error_message_buffer_size, chars_written, last_err );
 		if ( FAILED( fmt_res ) ) {
-			std::terminate( );
+			// No message text for this error code: log it with an empty message rather than terminating.
+			error_message_buffer[ 0 ] = L'\0';
 			}
 		if ( ret.HighPart != NULL ) {
 			if ( last_err != NO_ERROR ) {
@@ -389,8 +390,8 @@ namespace {
 #endif
 				}
 			else {
-				TRACE( L"Failed to format error message for error encountered when trying to open `%s`\r\n", path.c_str( ) );
-				std::terminate( );
+				// Some error codes have no system message text; that's no reason to kill the scan. Fall back like any other failure.
+				TRACE( L"Failed to format error message (error %lu) encountered when trying to open `%s`\r\n", last_err, path.c_str( ) );
 				}
 			return query_special_file_fallback( path, files, special_file_name );
 		}
@@ -551,8 +552,8 @@ namespace {
 			const BOOL result = ::UnmapViewOfFile(mappedMFTView);
 			if (result == 0) {
 				const DWORD last_err = ::GetLastError();
+				// Worst case this leaks one view of $MFT; not worth killing the app mid-scan over.
 				TRACE(L"Failed to unmap MFT view! Error: %lu\r\n", last_err);
-				std::terminate();
 				}
 			});
 

@@ -251,11 +251,9 @@ void CGraphView::OnDraw( CDC* pScreen_Device_Context ) {
 	if ( root == NULL ) {
 		return;
 		}
-	ASSERT( root->m_attr.m_done );
-
+	// A rescan (Delete/Refresh) leaves this view visible while the new tree is still being built: nothing to draw yet.
 	if ( !( root->m_attr.m_done ) ) {
-		displayWindowsMsgBoxWithMessage( L"CGraphView::OnLButtonDown: root item is NOT done! This should never happen!" );
-		std::terminate( );
+		return;
 		}
 	if ( m_recalculationSuspended || ( !m_showTreemap ) ) {
 		// TODO: draw something interesting, e.g. outline of the first level.
@@ -278,11 +276,9 @@ void CGraphView::OnMouseMove( UINT /*nFlags*/, CPoint point ) {
 		return;
 		}
 
-	ASSERT( root->m_attr.m_done );
-
+	// Mouse over the treemap while a rescan is running: ignore until the tree is done.
 	if ( !( root->m_attr.m_done ) ) {
-		displayWindowsMsgBoxWithMessage( L"CGraphView::OnMouseMove: root item is NOT done! This should never happen!" );
-		std::terminate( );
+		return;
 		}
 
 	if ( !( CGraphView::IsDrawn( ) ) ) {
@@ -384,11 +380,9 @@ void CGraphView::OnLButtonDown( UINT nFlags, CPoint point ) {
 		return;
 		}
 
-	ASSERT( root->m_attr.m_done );
-
+	// Click on the treemap while a rescan is running: ignore until the tree is done.
 	if ( !( root->m_attr.m_done ) ) {
-		displayWindowsMsgBoxWithMessage( L"CGraphView::OnLButtonDown: root item is NOT done! This should never happen!" );
-		std::terminate( );
+		return;
 		}
 
 	if ( !CGraphView::IsDrawn( ) ) {
